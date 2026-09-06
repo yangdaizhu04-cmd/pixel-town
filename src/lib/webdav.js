@@ -7,7 +7,12 @@
 const authHeader = (user, pass) =>
   'Basic ' + btoa(unescape(encodeURIComponent(`${user}:${pass}`)))
 
-const normUrl = (u) => (u || '').trim().replace(/\/+$/, '')
+const normUrl = (u) => {
+  const s = (u || '').trim().replace(/\/+$/, '')
+  // 只允许 http(s)：浏览器本来也发不了其他协议，这里提前给出人话报错
+  if (!/^https?:\/\//i.test(s)) throw new Error('WebDAV 地址要以 http:// 或 https:// 开头')
+  return s
+}
 
 export async function webdavUpload({ url, user, pass, content, filename }) {
   const res = await fetch(`${normUrl(url)}/${filename}`, {

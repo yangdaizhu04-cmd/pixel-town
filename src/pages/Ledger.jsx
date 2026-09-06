@@ -169,15 +169,7 @@ export default function Ledger() {
         </div>
       }>
         {byCat.length === 0 ? <Empty icon="🧾">这个月还没有支出记录，记一笔试试～</Empty> : (
-          <>
-            <Bars data={byCat} rows={9} scale={26} fmt={(v) => `¥${v}`} />
-            {Object.keys(budgets).length > 0 && (
-              <div className="budgets">
-                <h4 className="custom-title">预算进度</h4>
-                {Object.keys(budgets).filter((c) => c !== '工资').map(budgetRow)}
-              </div>
-            )}
-          </>
+          <Bars data={byCat} rows={9} scale={26} fmt={(v) => `¥${v}`} />
         )}
       </Panel>
 

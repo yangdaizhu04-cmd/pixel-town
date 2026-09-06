@@ -13,6 +13,7 @@ const fmtClock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${St
 function Pomodoro() {
   const { state } = useApp()
   const [min, setMin] = useState(25)
+  const [minText, setMinText] = useState('25') // 输入框独立文本态：打字过程不被 clamp 打断
   const [planId, setPlanId] = useState('')
   const [pomo, setPomo] = useState(null)
 
@@ -21,6 +22,22 @@ function Pomodoro() {
   const running = pomo?.running
   const left = pomo?.left ?? min * 60
   const started = pomo && (pomo.left !== pomo.total || running)
+
+  const pickMin = (m) => {
+    setMin(m)
+    setMinText(String(m))
+    if (!running) pomoReset(m, planId)
+    sfx('click')
+  }
+  // 自定义时长：合法范围 1-180 分钟，空闲时同步重置时钟
+  const typeMin = (text) => {
+    setMinText(text)
+    const v = Math.round(+text)
+    if (v >= 1 && v <= 180) {
+      setMin(v)
+      if (!running && !started) pomoReset(v, planId)
+    }
+  }
 
   return (
     <Panel
@@ -41,19 +58,29 @@ function Pomodoro() {
           </span>
         </div>
         <div className="pomo-ctrl">
-          <div className="seg">
-            {POMO_MINS.map((m) => (
-              <button key={m} className={min === m ? 'on' : ''} disabled={running} onClick={() => { setMin(m); pomoReset(m, planId); sfx('click') }}>{m} 分</button>
-            ))}
+          <div className="pomo-set">
+            <div className="seg">
+              {POMO_MINS.map((m) => (
+                <button key={m} className={min === m ? 'on' : ''} disabled={running} onClick={() => pickMin(m)}>{m} 分</button>
+              ))}
+            </div>
+            <input
+              type="number" min="1" max="180" className="pomo-custom"
+              value={minText}
+              disabled={running}
+              title="自定义时长，1-180 分钟"
+              onChange={(e) => typeMin(e.target.value)}
+            />
+            <span className="pomo-custom-unit">分钟</span>
           </div>
           <div className="btn-row">
             {!running
-              ? <Btn color="green" onClick={() => { if (started) pomoResume(); else { pomoStart(min, planId); emit('toast', { icon: '🍅', text: '番茄钟出发！这段时间属于你' }) } }}>{started ? '继续 ▶' : '开始专注 ▶'}</Btn>
+              ? <Btn color="green" onClick={() => { if (started) pomoResume(); else { pomoStart(min, planId); emit('toast', { icon: '🍅', text: `番茄钟出发！接下来 ${min} 分钟属于你` }) } }}>{started ? '继续 ▶' : `开始专注 ▶（${min} 分）`}</Btn>
               : <Btn color="gold" onClick={() => pomoPause()}>暂停 ⏸</Btn>}
-            <Btn onClick={() => pomoReset(min, planId)}>重置 ↻</Btn>
+            <Btn onClick={() => { pomoReset(min, planId); setMinText(String(min)) }}>重置 ↻</Btn>
             {started && <Btn color="red" onClick={() => pomoStop()}>放弃</Btn>}
           </div>
-          <p className="muted">中途切去别的页面它也会继续走；完成时自动记时长、发 XP，阿咕会喊你回来。</p>
+          <p className="muted">时长可以自己定（1-180 分钟）；中途切去别的页面它也会继续走；完成时自动记时长、发 XP，阿咕会喊你回来。</p>
         </div>
       </div>
     </Panel>

@@ -582,6 +582,9 @@ textarea { resize: vertical; width: 100%; }
 .pomo-hint { display: block; font-size: 12px; color: var(--ink2); margin-top: 6px; }
 .pomo-bird { position: absolute; top: -30px; right: -8px; }
 .pomo-ctrl { flex: 1; min-width: 220px; }
+.pomo-set { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.pomo-custom { width: 84px; padding: 7px 10px; font-size: 14px; }
+.pomo-custom-unit { font-size: 13px; color: var(--ink2); }
 .pomo-badge {
   position: fixed; left: 22px; bottom: 22px; z-index: 150;
   background: var(--paper); border: none; font-family: inherit; font-size: 14px; font-weight: bold; color: var(--ink);

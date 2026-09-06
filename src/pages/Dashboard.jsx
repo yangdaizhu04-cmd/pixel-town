@@ -93,6 +93,12 @@ export default function Dashboard() {
   }, { scope: rootRef })
 
   const water = () => {
+    // 空花园不浇水：没有种植物的盆时直接提醒，避免白花金币
+    if (!state.profile.pots.some((x) => x.kind)) {
+      emit('toast', { icon: '🪴', text: '花园里还没有植物，先在空盆里种下种子吧～' })
+      sfx('oops')
+      return
+    }
     const cost = freeWater ? 0 : WATER_COST
     if (cost > state.profile.coins) {
       emit('toast', { icon: '🪙', text: '金币不够啦，完成任务赚一点再来～' })
