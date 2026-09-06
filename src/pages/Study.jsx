@@ -4,7 +4,7 @@ import { Panel, Btn, Bar, Empty, Chip, Field, confirmBox } from '../components/u
 import { Bars } from '../lib/charts.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { reward, sfx, emit } from '../lib/gamify.js'
-import { pomoSubscribe, pomoStart, pomoPause, pomoResume, pomoReset, pomoStop } from '../lib/pomo.js'
+import { pomoSubscribe, pomoStart, pomoPause, pomoResume, pomoReset, pomoStop, pomoSetBreak } from '../lib/pomo.js'
 import { dayKey, lastNDays, fmtShort, daysBetween, WEEKDAYS } from '../lib/dates.js'
 
 const POMO_MINS = [15, 25, 45, 60]
@@ -12,75 +12,134 @@ const fmtClock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${St
 
 function Pomodoro() {
   const { state } = useApp()
+  const [mode, setMode] = useState('focus') // 正在配置的模式（运行中不可切）
   const [min, setMin] = useState(25)
-  const [minText, setMinText] = useState('25') // 输入框独立文本态：打字过程不被 clamp 打断
+  const [minText, setMinText] = useState('25')
+  const [breakMin, setBreakMin] = useState(5)
+  const [breakText, setBreakText] = useState('5')
   const [planId, setPlanId] = useState('')
   const [pomo, setPomo] = useState(null)
 
   useEffect(() => pomoSubscribe(setPomo), [])
 
   const running = pomo?.running
-  const left = pomo?.left ?? min * 60
+  const curMode = pomo?.mode || mode // 运行/刚结束的一轮以 pomo 实际模式为准
+  const isBreakNow = curMode === 'break'
+  const durNow = isBreakNow ? breakMin : min
+  const left = pomo?.left ?? durNow * 60
   const started = pomo && (pomo.left !== pomo.total || running)
 
-  const pickMin = (m) => {
-    setMin(m)
-    setMinText(String(m))
-    if (!running) pomoReset(m, planId)
+  const pickFocusMin = (m) => {
+    setMin(m); setMinText(String(m))
+    if (!running) pomoReset(m, planId, 'focus')
     sfx('click')
   }
   // 自定义时长：合法范围 1-180 分钟，空闲时同步重置时钟
-  const typeMin = (text) => {
+  const typeFocusMin = (text) => {
     setMinText(text)
     const v = Math.round(+text)
     if (v >= 1 && v <= 180) {
       setMin(v)
-      if (!running && !started) pomoReset(v, planId)
+      if (!running && !started) pomoReset(v, planId, 'focus')
+    }
+  }
+  const typeBreakMin = (text) => {
+    setBreakText(text)
+    const v = Math.round(+text)
+    if (v >= 1 && v <= 60) {
+      setBreakMin(v)
+      pomoSetBreak(v)
+      // 空闲（含上轮休息刚结束）时时钟实时跟随；暂停中的旧会话不打断
+      if (!running && !started) pomoReset(v, '', 'break')
+    }
+  }
+  const switchMode = (m) => {
+    if (running || m === mode) return
+    setMode(m)
+    sfx('click')
+    if (!started) pomoReset(m === 'break' ? breakMin : min, m === 'break' ? '' : planId, m)
+  }
+
+  const start = () => {
+    if (mode === 'break') {
+      pomoStart(breakMin, '', 'break')
+      emit('toast', { icon: '☕', text: `休息 ${breakMin} 分钟，起来走走吧` })
+    } else {
+      pomoStart(min, planId, 'focus')
+      emit('toast', { icon: '🍅', text: `番茄钟出发！接下来 ${min} 分钟属于你` })
     }
   }
 
   return (
     <Panel
       title="像素番茄钟" icon="🍅"
-      extra={state.study.length > 0 && (
-        <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
-          <option value="">自由专注（不挂计划）</option>
-          {state.study.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-        </select>
-      )}
+      extra={
+        <div className="pomo-extra">
+          {state.study.length > 0 && (
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} title="专注完成后记到哪个计划">
+              <option value="">自由专注（不挂计划）</option>
+              {state.study.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+            </select>
+          )}
+          <span className="pomo-total">已累计 {state.profile.stats?.pomos || 0} 🍅</span>
+        </div>
+      }
     >
       <div className="pomo">
-        <div className={`pomo-clock card ${running ? 'on' : ''}`}>
+        <div className={`pomo-clock card ${running ? 'on' : ''} ${isBreakNow ? 'brk' : ''}`}>
           {running && <PixelSprite name="bird" scale={3} className="bob pomo-bird" />}
           <span className="pomo-time">{fmtClock(left)}</span>
           <span className="pomo-hint">
-            {running ? (planId ? '专注中…完成后自动记进计划' : '专注中…阿咕陪着你') : started ? '暂停中，歇会也行' : '选好时长，开始一段专注'}
+            {running
+              ? (isBreakNow ? '休息中…喝口水，看看远处' : (planId ? '专注中…完成后自动记进计划' : '专注中…阿咕陪着你'))
+              : started
+                ? '暂停中，歇会也行'
+                : (isBreakNow ? '休息轮待命，或切回专注' : '选好时长，开始一段专注')}
           </span>
         </div>
         <div className="pomo-ctrl">
           <div className="pomo-set">
             <div className="seg">
-              {POMO_MINS.map((m) => (
-                <button key={m} className={min === m ? 'on' : ''} disabled={running} onClick={() => pickMin(m)}>{m} 分</button>
-              ))}
+              <button className={curMode === 'focus' ? 'on' : ''} disabled={running} onClick={() => switchMode('focus')}>🎯 专注</button>
+              <button className={curMode === 'break' ? 'on' : ''} disabled={running} onClick={() => switchMode('break')}>☕ 休息</button>
             </div>
-            <input
-              type="number" min="1" max="180" className="pomo-custom"
-              value={minText}
-              disabled={running}
-              title="自定义时长，1-180 分钟"
-              onChange={(e) => typeMin(e.target.value)}
-            />
-            <span className="pomo-custom-unit">分钟</span>
+            {mode === 'focus' ? (
+              <>
+                <div className="seg">
+                  {POMO_MINS.map((m) => (
+                    <button key={m} className={min === m ? 'on' : ''} disabled={running} onClick={() => pickFocusMin(m)}>{m} 分</button>
+                  ))}
+                </div>
+                <input
+                  type="number" min="1" max="180" className="pomo-custom"
+                  value={minText}
+                  disabled={running}
+                  title="自定义专注时长，1-180 分钟"
+                  onChange={(e) => typeFocusMin(e.target.value)}
+                />
+                <span className="pomo-custom-unit">分钟</span>
+              </>
+            ) : (
+              <>
+                <input
+                  type="number" min="1" max="60" className="pomo-custom"
+                  value={breakText}
+                  disabled={running}
+                  title="休息时长，1-60 分钟"
+                  onChange={(e) => typeBreakMin(e.target.value)}
+                />
+                <span className="pomo-custom-unit">分钟休息（专注结束后会自动开始）</span>
+              </>
+            )}
           </div>
           <div className="btn-row">
             {!running
-              ? <Btn color="green" onClick={() => { if (started) pomoResume(); else { pomoStart(min, planId); emit('toast', { icon: '🍅', text: `番茄钟出发！接下来 ${min} 分钟属于你` }) } }}>{started ? '继续 ▶' : `开始专注 ▶（${min} 分）`}</Btn>
+              ? <Btn color="green" onClick={() => { if (started) pomoResume(); else start() }}>{started ? '继续 ▶' : (mode === 'break' ? `开始休息 ▶（${breakMin} 分）` : `开始专注 ▶（${min} 分）`)}</Btn>
               : <Btn color="gold" onClick={() => pomoPause()}>暂停 ⏸</Btn>}
-            <Btn onClick={() => { pomoReset(min, planId); setMinText(String(min)) }}>重置 ↻</Btn>
+            <Btn onClick={() => { pomoReset(durNow, curMode === 'focus' ? planId : '', curMode); if (mode === 'break') pomoSetBreak(breakMin) }}>重置 ↻</Btn>
             {started && <Btn color="red" onClick={() => pomoStop()}>放弃</Btn>}
           </div>
-          <p className="muted">时长可以自己定（1-180 分钟）；中途切去别的页面它也会继续走；完成时自动记时长、发 XP，阿咕会喊你回来。</p>
+          <p className="muted">专注结束会自动进入休息轮（休息不发奖励，纯属劳逸结合）；时长都能自己定，中途切页也继续走，完成自动记时长、发 XP。</p>
         </div>
       </div>
     </Panel>

@@ -2,6 +2,7 @@
 // 为什么不用 React state：番茄钟要跨页面存活，挂在小程序模块里最稳；
 // 计时用「结束时间戳」而不是累加 interval：浏览器后台标签页会节流 setInterval，
 // 累加式计时会越走越慢，时间戳取差值永远准确。
+// v2.1：专注结束可自动接一段休息轮（休息不发奖励，纯劳逸提醒）。
 import { emit } from './gamify.js'
 
 const st = {
@@ -10,6 +11,8 @@ const st = {
   left: 25 * 60, // 剩余秒数
   total: 25 * 60,
   planId: '',   // 挂到哪个学习计划；空 = 自由专注
+  mode: 'focus', // focus 专注 | break 休息
+  breakMin: 5,  // 休息轮时长（分钟），专注结束后自动进入
 }
 
 const subs = new Set()
@@ -18,17 +21,21 @@ let timer = null
 const snap = () => ({ ...st })
 const tell = () => subs.forEach((f) => f(snap()))
 
+// 只读快照：给事件监听方（如 App 的休息轮提示）看当前状态用
+export const pomoSnap = snap
+
 function tick() {
   st.left = Math.max(0, Math.round((st.endAt - Date.now()) / 1000))
   tell()
   if (st.left <= 0) {
     const min = Math.round(st.total / 60)
     const planId = st.planId
+    const mode = st.mode
     stopLoop()
     st.running = false
     st.left = st.total
     tell()
-    emit('pomo-done', { min, planId })
+    emit('pomo-done', { min, planId, mode })
   }
 }
 
@@ -45,13 +52,25 @@ export function pomoSubscribe(f) {
   return () => subs.delete(f)
 }
 
-export function pomoStart(min, planId = '') {
+export function pomoStart(min, planId = '', mode = 'focus') {
+  st.mode = mode
   st.total = Math.max(1, Math.round(min * 60))
   st.left = st.total
   st.endAt = Date.now() + st.left * 1000
   st.planId = planId
   st.running = true
   startLoop()
+  tell()
+}
+
+// 专注结束后的休息轮：时长用设定好的 breakMin，不挂计划
+export function pomoStartBreak() {
+  pomoStart(st.breakMin, '', 'break')
+}
+
+export function pomoSetBreak(min) {
+  const v = Math.min(60, Math.max(1, Math.round(+min || 5)))
+  st.breakMin = v
   tell()
 }
 
@@ -70,9 +89,10 @@ export function pomoResume() {
   tell()
 }
 
-export function pomoReset(min = st.total / 60, planId = st.planId) {
+export function pomoReset(min = st.total / 60, planId = st.planId, mode = st.mode) {
   stopLoop()
   st.running = false
+  st.mode = mode
   st.total = Math.max(1, Math.round(min * 60))
   st.left = st.total
   st.planId = planId
@@ -90,5 +110,8 @@ export const pomoIsRunning = () => st.running
 
 // 开发测试钩子：dev 模式下把 3 秒的「迷你番茄」挂到 window，供自动化冒烟用
 if (import.meta.env.DEV) {
-  window.__pomo = { startTiny: () => pomoStart(0.05) }
+  window.__pomo = {
+    startTiny: (mode = 'focus') => pomoStart(0.05, '', mode),
+    snap: () => ({ ...st }),
+  }
 }

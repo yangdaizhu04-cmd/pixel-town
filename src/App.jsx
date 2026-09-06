@@ -6,7 +6,7 @@ import { PixelSprite } from './lib/sprites.jsx'
 import { Chip, Btn, Bar, ConfirmHost } from './components/ui.jsx'
 import { ToastHost, ConfettiHost, LevelUpModal } from './components/effects.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
-import { pomoSubscribe } from './lib/pomo.js'
+import { pomoSubscribe, pomoStartBreak, pomoSnap } from './lib/pomo.js'
 import { ACHIEVEMENTS } from './lib/achievements.js'
 import { PLANT_META } from './lib/shop.js'
 import { dayKey, pickByDay, daysBetween } from './lib/dates.js'
@@ -56,9 +56,10 @@ function PomoBadge({ onGo }) {
   if (!pomo || (!pomo.running && pomo.left === pomo.total)) return null
   const mm = String(Math.floor(pomo.left / 60)).padStart(2, '0')
   const ss = String(pomo.left % 60).padStart(2, '0')
+  const isBreak = pomo.mode === 'break'
   return (
-    <button className={`pomo-badge ${pomo.running ? 'run' : ''}`} onClick={onGo} title="番茄钟进行中，点回学习页">
-      🍅 {mm}:{ss}
+    <button className={`pomo-badge ${pomo.running ? 'run' : ''} ${isBreak ? 'brk' : ''}`} onClick={onGo} title={isBreak ? '休息轮进行中，点回学习页' : '番茄钟进行中，点回学习页'}>
+      {isBreak ? '☕' : '🍅'} {mm}:{ss}
     </button>
   )
 }
@@ -74,14 +75,20 @@ export default function App() {
   // 音效开关
   useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
 
-  // 番茄钟完成：自动记时长（挂了计划就进计划）、发奖励、响号角
+  // 番茄钟完成：专注轮 → 记时长发奖励并自动接休息轮；休息轮 → 只提醒不奖励（休息不该被 KPI 化）
   useEffect(() => on('pomo-done', ({ detail }) => {
-    const { min, planId } = detail || {}
-    dispatch({ type: 'POMO_DONE', min, planId })
+    const { min, planId, mode } = detail || {}
     sfx('alarm')
+    if (mode === 'break') {
+      emit('toast', { icon: '☀️', text: '休息完毕！准备好就开始下一个番茄吧' })
+      return
+    }
+    dispatch({ type: 'POMO_DONE', min, planId })
     const xp = Math.min(30, Math.max(5, Math.round((min / 30) * 10)))
     const coins = min >= 30 ? 3 : 1
     reward(dispatch, { xp, coins, msg: `专注 ${min} 分钟`, icon: '🍅', confetti: true })
+    pomoStartBreak()
+    emit('toast', { icon: '☕', text: `休息 ${pomoSnap().total / 60} 分钟，阿咕替你看着钟` })
   }), [])
 
   // 升级检测
