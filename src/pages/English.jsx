@@ -127,15 +127,18 @@ export default function English() {
 
   const doImport = () => {
     const lines = importText.split('\n').map((x) => x.trim()).filter(Boolean)
-    const words = lines.map(parseWordLine).filter(Boolean)
+    // 与内置词也查重：否则词库出现两个同名条目，测验会给出两个一模一样的选项
+    const builtin = new Set(WORDS.map((x) => x.w))
+    const parsed = lines.map(parseWordLine).filter(Boolean)
+    const words = parsed.filter((x) => !builtin.has(x.w))
     const skipped = lines.length - words.length
     if (!words.length) {
-      emit('toast', { icon: '📥', text: '没有解析出有效单词，检查一下格式哦' })
+      emit('toast', { icon: '📥', text: '没有收下新单词（格式不对，或都是已有词）' })
       sfx('oops')
       return
     }
     dispatch({ type: 'ENGLISH_IMPORT', words })
-    emit('toast', { icon: '📥', text: `收下 ${words.length} 个新单词${skipped ? `，${skipped} 行没看懂被跳过` : ''}` })
+    emit('toast', { icon: '📥', text: `收下 ${words.length} 个新单词${skipped ? `，${skipped} 行跳过（格式不对或与已有词重复）` : ''}` })
     sfx('coin')
     setImportText('')
   }

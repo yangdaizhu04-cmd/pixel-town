@@ -171,6 +171,33 @@ export default function App() {
   // 切页回顶部
   useEffect(() => { window.scrollTo({ top: 0 }) }, [page])
 
+  // 标签页标题：挂后台也能看出在哪页、番茄钟还剩多久
+  const pageRef = useRef(page)
+  pageRef.current = page
+  useEffect(() => {
+    const pageTitle = () => {
+      const p = PAGES.find((x) => x.id === pageRef.current)
+      document.title = `${p.icon} ${p.label} · 拾光小镇`
+    }
+    pageTitle()
+    return pomoSubscribe((s) => {
+      if (s.running || s.left !== s.total) {
+        const mm = String(Math.floor(s.left / 60)).padStart(2, '0')
+        const ss = String(s.left % 60).padStart(2, '0')
+        document.title = `${s.mode === 'break' ? '☕' : '🍅'} ${mm}:${ss} ${s.mode === 'break' ? '休息' : '专注'}中 · 拾光小镇`
+      } else {
+        pageTitle()
+      }
+    })
+  }, [])
+  // 空闲时切页刷新标题；番茄钟进行中则让位给倒计时标题（由上面的订阅者持续刷新）
+  useEffect(() => {
+    const s = pomoSnap()
+    if (s.running || s.left !== s.total) return
+    const p = PAGES.find((x) => x.id === page)
+    document.title = `${p.icon} ${p.label} · 拾光小镇`
+  }, [page])
+
   const { profile } = state
   const need = xpNeeded(profile.level)
   const Cur = PAGES.find((p) => p.id === page).comp
@@ -206,6 +233,7 @@ export default function App() {
               <button
                 key={p.id}
                 className={`nav-item ${page === p.id ? 'active' : ''}`}
+                aria-current={page === p.id ? 'page' : undefined}
                 onClick={() => { if (page !== p.id) { sfx('click'); setPage(p.id) } }}
               >
                 <span className="nav-icon">{p.icon}</span>

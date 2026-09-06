@@ -44,8 +44,11 @@ export default function SettingsModal({ open, onClose }) {
     onClose()
   }
 
+  // 备份文件里绝不能带密钥：剥掉阿咕 API Key 和 WebDAV 密码再导出（导入时这些留空走离线兜底，无碍）
+  const sanitized = () => ({ ...state, settings: { ...state.settings, apiKey: '', webdavPass: '' } })
+
   const exportData = () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(sanitized(), null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -53,7 +56,7 @@ export default function SettingsModal({ open, onClose }) {
     a.click()
     URL.revokeObjectURL(url)
     dispatch({ type: 'EXPORT_MARK' })
-    emit('toast', { icon: '💾', text: '备份已导出，记得存进网盘或手机里' })
+    emit('toast', { icon: '💾', text: '备份已导出（不含任何密钥），记得存进网盘或手机里' })
   }
 
   // 导入前先预览存档摘要，确认后才覆盖（旧版是直接覆盖，误选文件会丢数据）
@@ -84,7 +87,7 @@ export default function SettingsModal({ open, onClose }) {
   const davUpload = async () => {
     setDavBusy('up')
     try {
-      await webdavUpload({ url: form.webdavUrl, user: form.webdavUser, pass: form.webdavPass, content: JSON.stringify(state), filename: backupFilename() })
+      await webdavUpload({ url: form.webdavUrl, user: form.webdavUser, pass: form.webdavPass, content: JSON.stringify(sanitized()), filename: backupFilename() })
       dispatch({ type: 'EXPORT_MARK' })
       emit('toast', { icon: '☁️', text: '已备份到网盘！' })
       sfx('levelup')

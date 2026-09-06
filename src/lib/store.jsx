@@ -309,6 +309,9 @@ function reducer(s, a) {
       return { ...s, todos: s.todos.filter((x) => x.id !== a.id) }
     case 'TODO_CLEAR_DONE':
       return { ...s, todos: s.todos.filter((x) => !(x.done && x.day === t)) }
+    // 历史数据卫生：把所有「已完成」的一次清掉（重复待办 done 恒为 false，天然不受影响）
+    case 'TODO_CLEAR_ALL_DONE':
+      return { ...s, todos: s.todos.filter((x) => !x.done) }
 
     // ---------- 账本（v2 加预算） ----------
     case 'LEDGER_ADD':

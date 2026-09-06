@@ -6,7 +6,7 @@ import { fetchNews } from '../lib/news.js'
 import { emit } from '../lib/gamify.js'
 import { fmtShort } from '../lib/dates.js'
 
-const SOURCE_COLORS = { 机器之心: 'blue', 量子位: 'orange', '36氪': 'gold', 内置精选: 'pink' }
+const SOURCE_COLORS = { 量子位: 'orange', 爱范儿: 'blue', InfoQ: 'gold', 'Hacker News': 'green', 内置精选: 'pink' }
 
 export default function News() {
   const { state, dispatch } = useApp()

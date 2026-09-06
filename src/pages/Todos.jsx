@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useApp, todosOpen, todosDoneToday } from '../lib/store.jsx'
-import { Panel, Btn, Bar, Empty, Chip } from '../components/ui.jsx'
+import { Panel, Btn, Bar, Empty, Chip, confirmBox } from '../components/ui.jsx'
 import { REWARDS, reward, sfx } from '../lib/gamify.js'
 import { dayKey, addDays } from '../lib/dates.js'
 
@@ -101,7 +101,21 @@ export default function Todos() {
         </ul>
       </Panel>
 
-      <Panel title="今日已完成" icon="🎉" extra={done.length > 0 && <Btn size="sm" onClick={() => dispatch({ type: 'TODO_CLEAR_DONE' })}>清空记录</Btn>}>
+      <Panel
+        title="今日已完成" icon="🎉"
+        extra={done.length > 0 && (
+          <div className="btn-row">
+            <Btn size="sm" onClick={() => dispatch({ type: 'TODO_CLEAR_DONE' })}>清空今日记录</Btn>
+            <Btn
+              size="sm" color="red"
+              onClick={async () => {
+                const ok = await confirmBox({ title: '清空全部已完成', message: '把历史已完成待办也一并清掉？\n只删「已完成」的——没做的和重复待办不受影响。', danger: true, okText: '清空' })
+                if (ok) { dispatch({ type: 'TODO_CLEAR_ALL_DONE' }); sfx('oops') }
+              }}
+            >清空全部</Btn>
+          </div>
+        )}
+      >
         {done.length === 0 ? (
           <Empty icon="⏳">还没有完成记录。完成第一件事，来拿 +10 XP！</Empty>
         ) : (

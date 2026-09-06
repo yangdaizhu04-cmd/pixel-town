@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useApp, habitStreak } from '../lib/store.jsx'
 import { Panel, Btn, Empty, Chip, confirmBox } from '../components/ui.jsx'
 import { REWARDS, reward, sfx } from '../lib/gamify.js'
-import { dayKey, lastNDays, fmtShort, WEEKDAYS } from '../lib/dates.js'
+import { dayKey, addDays, lastNDays, fmtShort, WEEKDAYS } from '../lib/dates.js'
 
 const EMOJIS = ['💧', '🏃', '📖', '🧘', '🎸', '🛏️', '🥗', '✏️', '🧹', '🌱']
 const COLORS = ['green', 'blue', 'orange', 'pink']
@@ -12,7 +12,8 @@ export default function Habits() {
   const [name, setName] = useState('')
   const [icon, setIcon] = useState('💧')
   const [color, setColor] = useState('green')
-  const days = lastNDays(7)
+  const [weekOffset, setWeekOffset] = useState(0) // 0 = 本周，1 = 上周……
+  const days = lastNDays(7, addDays(dayKey(), -weekOffset * 7))
   const t = dayKey()
 
   const doneToday = state.habits.filter((h) => h.days[t]).length
@@ -44,7 +45,13 @@ export default function Habits() {
         {state.habits.length === 0 ? (
           <Empty icon="🌱">种下第一个小习惯，比如「喝够 8 杯水」。</Empty>
         ) : (
-          <div className="habit-table">
+          <>
+            <div className="month-nav" style={{ marginBottom: 10 }}>
+              <Btn size="sm" onClick={() => setWeekOffset(weekOffset + 1)}>← 更早一周</Btn>
+              <Chip color={weekOffset === 0 ? 'green' : ''}>{weekOffset === 0 ? '本周' : `${weekOffset} 周前`}</Chip>
+              <Btn size="sm" onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))} disabled={weekOffset === 0}>回到本周 →</Btn>
+            </div>
+            <div className="habit-table">
             <div className="habit-row habit-head">
               <div className="habit-name-cell" />
               {days.map((d) => (
@@ -86,7 +93,8 @@ export default function Habits() {
                 </div>
               )
             })}
-          </div>
+            </div>
+          </>
         )}
       </Panel>
 
