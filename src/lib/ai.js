@@ -21,18 +21,38 @@ export function dataSummary(state) {
   return lines.join('\n')
 }
 
-// ---------- 真实大模型（OpenAI 兼容接口） ----------
-export async function askAI({ state, input, signal }) {
+const SYSTEM_PROMPT = (state) => [
+  '你是「拾光小镇」里的精灵管家「阿咕」，一只圆滚滚的像素小鸟。',
+  '说话风格：温暖、元气、简短，每次回复不超过 3 句，可以适量用 emoji 或颜文字（如 (๑•̀ㅂ•́)و、咕咕！）。',
+  '你会根据下面的小镇数据给主人具体的鼓励和建议；数据里没有的不要编造。',
+  '你还可以帮主人执行操作：当主人想记待办或记账时，在回复的最末尾另起一行输出动作标记（最多一个）：',
+  '- 记待办：[ACT:todo_add:待办内容]',
+  '- 记支出：[ACT:ledger_add:金额:备注]',
+  '标记里的内容要简洁；输出标记时不用向主人解释标记本身，其余时候绝不要输出标记。',
+  '今天是 ' + dayKey() + '。主人的名字叫「' + (state.profile.name || '小镇居民') + '」。主人的小镇数据：\n' + dataSummary(state),
+].join('\n')
+
+// 解析并剥离回复里的动作标记 → { clean, acts: [{type, text}|{type, amount, note}] }
+export function parseActs(text) {
+  const acts = []
+  const clean = String(text || '').replace(/\s*\[ACT:(todo_add|ledger_add):([^\]]*)\]\s*/g, (_m, kind, payload) => {
+    if (kind === 'todo_add') acts.push({ type: 'TODO_ADD', text: payload.trim().slice(0, 60) })
+    else {
+      const m = payload.match(/(\d+(?:\.\d+)?)(?:[:：,，\s]+(.*))?/)
+      if (m) acts.push({ type: 'LEDGER_ADD', dir: 'out', amount: +m[1], cat: '餐饮', note: (m[2] || '').trim() || '阿咕帮记的一笔' })
+    }
+    return ''
+  })
+  return { clean: clean.trim(), acts: acts.filter((x) => (x.text && x.text !== 'todo_add') || x.amount > 0) }
+}
+
+// ---------- 真实大模型（OpenAI 兼容接口，SSE 流式） ----------
+// onDelta(deltaText, fullText)：流式回调；服务端不支持流式时自动退化为一次性返回。
+export async function askAI({ state, input, signal, onDelta }) {
   const cfg = state.settings
   if (!cfg.apiKey) throw new Error('NO_KEY')
   const base = (cfg.baseUrl || '').replace(/\/+$/, '')
   const history = state.chat.slice(-12).map((m) => ({ role: m.role, content: m.content }))
-  const system = [
-    '你是「拾光小镇」里的精灵管家「阿咕」，一只圆滚滚的像素小鸟。',
-    '说话风格：温暖、元气、简短，每次回复不超过 3 句，可以适量用 emoji 或颜文字（如 (๑•̀ㅂ•́)و、咕咕！）。',
-    '你会根据下面的小镇数据给主人具体的鼓励和建议；数据里没有的不要编造。',
-    '今天是 ' + dayKey() + '。主人的名字叫「' + (state.profile.name || '小镇居民') + '」。主人的小镇数据：\n' + dataSummary(state),
-  ].join('\n')
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     signal,
@@ -44,14 +64,48 @@ export async function askAI({ state, input, signal }) {
       model: cfg.model || 'deepseek-chat',
       temperature: 0.8,
       max_tokens: 300,
-      messages: [{ role: 'system', content: system }, ...history, { role: 'user', content: input }],
+      stream: true,
+      messages: [{ role: 'system', content: SYSTEM_PROMPT(state) }, ...history, { role: 'user', content: input }],
     }),
   })
   if (!res.ok) throw new Error(`API ${res.status}`)
-  const data = await res.json()
-  const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-  if (!text) throw new Error('空回复')
-  return text.trim()
+
+  // 有的网关不理会 stream:true，直接回普通 JSON——按内容类型兜底
+  const ctype = res.headers.get('content-type') || ''
+  if (!res.body || (!ctype.includes('event-stream') && !ctype.includes('stream'))) {
+    const data = await res.json()
+    const text = data.choices?.[0]?.message?.content || ''
+    if (!text) throw new Error('空回复')
+    onDelta && onDelta(text, text)
+    return text.trim()
+  }
+
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  let full = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() || ''
+    for (const line of lines) {
+      const s = line.trim()
+      if (!s.startsWith('data:')) continue
+      const payload = s.slice(5).trim()
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const delta = JSON.parse(payload).choices?.[0]?.delta?.content || ''
+        if (delta) {
+          full += delta
+          onDelta && onDelta(delta, full)
+        }
+      } catch { /* 半包/心跳行忽略，下轮 buf 会补全 */ }
+    }
+  }
+  if (!full.trim()) throw new Error('空回复')
+  return full.trim()
 }
 
 // ---------- 本地小精灵（离线兜底：规则 + 数据感知） ----------
@@ -116,6 +170,14 @@ export function localAgent(input, state) {
     if (!state.study.length) return { reply: '还没有学习计划哦，去「学习计划」立一个小目标？📚' }
     const p = state.study[0]
     return { reply: `「${p.title}」已完成 ${Math.round(studyDone(p) / 60 * 10) / 10} / ${p.targetH} 小时 ⏳\n每次记录 25 分钟就很棒，别一口气吃成胖子～` }
+  }
+  // 番茄钟
+  if (/番茄|专注|tomato|pomodoro/i.test(q)) {
+    return { reply: '想专注的话去「学习计划」页喊一声番茄钟吧 🍅\n阿咕会坐在旁边陪你，结束自动帮你记时长！' }
+  }
+  // 商店
+  if (/商店|买|金币有什么用/.test(q)) {
+    return { reply: `现在有 ${state.profile.coins} 枚金币 🪙\n花园下面有家小店：花盆、种子、装饰、阿咕的帽子都有卖～` }
   }
   // 安慰
   if (/加油|鼓励|难过|累|焦虑|压力大|emo|不开心|烦|哭/.test(q)) {

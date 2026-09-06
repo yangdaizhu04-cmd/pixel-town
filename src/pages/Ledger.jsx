@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import { useApp, balanceOf, monthInOut } from '../lib/store.jsx'
-import { Panel, Btn, Empty, Chip, Field } from '../components/ui.jsx'
+import { Panel, Btn, Empty, Chip } from '../components/ui.jsx'
 import { Bars } from '../lib/charts.jsx'
-import { sfx } from '../lib/gamify.js'
+import { sfx, emit } from '../lib/gamify.js'
 import { dayKey, monthKey, fmtShort } from '../lib/dates.js'
 
 const CATS_OUT = [
@@ -15,8 +15,14 @@ const CATS_IN = [
 ]
 const CAT_COLORS = { 餐饮: 'orange', 购物: 'pink', 交通: 'blue', 娱乐: 'red', 生活: 'green', 学习: 'gold', 健康: 'greenD', 其他: 'brown', 工资: 'green' }
 const catIcon = (c) => (CATS_OUT.concat(CATS_IN).find((x) => x.id === c) || { icon: '✨' }).icon
-const COLORS = ['orange', 'pink', 'blue', 'red', 'green', 'gold', 'greenD', 'brown']
 const chartColorOf = (c) => CAT_COLORS[c] || 'brown'
+
+const monthShift = (mk, n) => {
+  const d = new Date(`${mk}-01T00:00:00`)
+  d.setMonth(d.getMonth() + n)
+  return monthKey(dayKey(d))
+}
+const monthLabel = (mk) => `${+mk.slice(5, 7)} 月`
 
 export default function Ledger() {
   const { state, dispatch } = useApp()
@@ -24,10 +30,14 @@ export default function Ledger() {
   const [amount, setAmount] = useState('')
   const [cat, setCat] = useState('餐饮')
   const [note, setNote] = useState('')
+  const [mk, setMk] = useState(monthKey())       // 正在查看的月份
+  const [filterCat, setFilterCat] = useState('') // 流水筛选：分类
+  const [filterType, setFilterType] = useState('') // 流水筛选：支出/收入
 
-  const mk = monthKey()
-  const { i, o } = monthInOut(state)
+  const { i, o } = monthInOut(state, mk)
   const cats = dir === 'out' ? CATS_OUT : CATS_IN
+  const budgets = state.budgets || {}
+  const t = dayKey()
 
   const byCat = useMemo(() => {
     const m = {}
@@ -42,9 +52,14 @@ export default function Ledger() {
 
   const byDay = useMemo(() => {
     const m = {}
-    for (const e of state.ledger) (m[e.day] = m[e.day] || []).push(e)
+    for (const e of state.ledger) {
+      if (!e.day.startsWith(mk)) continue
+      if (filterCat && e.cat !== filterCat) continue
+      if (filterType && e.type !== filterType) continue
+      ;(m[e.day] = m[e.day] || []).push(e)
+    }
     return Object.entries(m).sort((a, b) => (a[0] < b[0] ? 1 : -1))
-  }, [state.ledger])
+  }, [state.ledger, mk, filterCat, filterType])
 
   const add = () => {
     const v = Math.round(+amount * 100) / 100
@@ -55,18 +70,56 @@ export default function Ledger() {
     sfx('coin')
   }
 
+  const setBudget = (c, v) => dispatch({ type: 'BUDGET_SET', cat: c, amount: Math.round(+v || 0) })
+
+  const exportCsv = () => {
+    const rows = [['日期', '类型', '分类', '金额', '备注']]
+    for (const e of state.ledger) rows.push([e.day, e.type === 'in' ? '收入' : '支出', e.cat, e.amount, (e.note || '').replace(/"/g, '""')])
+    const csv = '\uFEFF' + rows.map((r) => r.map((x) => `"${x}"`).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pixel-town-ledger-${mk}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    emit('toast', { icon: '🧾', text: '账本 CSV 已导出（Excel 可直接打开）' })
+  }
+
+  const budgetRow = (c) => {
+    const spent = (byCat.find((x) => x.label === c) || {}).value || 0
+    const budget = budgets[c]
+    const pct = budget ? Math.min(100, (spent / budget) * 100) : 0
+    const over = budget && spent > budget
+    return (
+      <div key={c} className="budget-row">
+        <span className="budget-cat">{catIcon(c)} {c}</span>
+        <input
+          type="number" min="0" placeholder="预算 ¥"
+          value={budget || ''}
+          onChange={(e) => setBudget(c, e.target.value)}
+        />
+        {budget ? (
+          <div className={`budget-bar ${over ? 'over' : ''}`}>
+            <div className="budget-fill" style={{ width: `${pct}%` }} />
+            <span>{spent}/{budget}{over ? ' · 超啦 😯' : ''}</span>
+          </div>
+        ) : <span className="budget-hint">未设预算</span>}
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="stat-grid three">
         <div className="card stat">
           <span className="stat-icon">📈</span>
           <div className="stat-num">¥{i.toLocaleString()}</div>
-          <div className="stat-label">本月收入</div>
+          <div className="stat-label">{monthLabel(mk)}收入</div>
         </div>
         <div className="card stat">
           <span className="stat-icon">📉</span>
           <div className="stat-num">¥{o.toLocaleString()}</div>
-          <div className="stat-label">本月支出</div>
+          <div className="stat-label">{monthLabel(mk)}支出</div>
         </div>
         <div className="card stat">
           <span className="stat-icon">🏦</span>
@@ -108,17 +161,47 @@ export default function Ledger() {
         </div>
       </Panel>
 
-      <Panel title="本月钱都去哪了" icon="📊">
-        {byCat.length === 0 ? <Empty icon="🧾">本月还没有支出记录，记一笔试试～</Empty> : (
-          <Bars data={byCat} rows={9} scale={26} fmt={(v) => `¥${v}`} />
+      <Panel title={`${monthLabel(mk)}钱都去哪了`} icon="📊" extra={
+        <div className="month-nav">
+          <Btn size="sm" onClick={() => setMk(monthShift(mk, -1))}>←</Btn>
+          <Chip>{mk}</Chip>
+          <Btn size="sm" onClick={() => setMk(monthShift(mk, 1))} disabled={mk >= monthKey()}>→</Btn>
+        </div>
+      }>
+        {byCat.length === 0 ? <Empty icon="🧾">这个月还没有支出记录，记一笔试试～</Empty> : (
+          <>
+            <Bars data={byCat} rows={9} scale={26} fmt={(v) => `¥${v}`} />
+            {Object.keys(budgets).length > 0 && (
+              <div className="budgets">
+                <h4 className="custom-title">预算进度</h4>
+                {Object.keys(budgets).filter((c) => c !== '工资').map(budgetRow)}
+              </div>
+            )}
+          </>
         )}
       </Panel>
 
-      <Panel title="账本流水" icon="📒">
-        {byDay.length === 0 && <Empty icon="🪙">账本还空着。攒钱和攒 XP 一样，都是慢慢来的。</Empty>}
+      <Panel
+        title="账本流水" icon="📒"
+        extra={
+          <div className="ledger-filters">
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+              <option value="">全部</option>
+              <option value="out">支出</option>
+              <option value="in">收入</option>
+            </select>
+            <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+              <option value="">全部分类</option>
+              {CATS_OUT.concat(CATS_IN).map((c) => <option key={c.id} value={c.id}>{c.icon} {c.id}</option>)}
+            </select>
+            <Btn size="sm" onClick={exportCsv}>⬇ CSV</Btn>
+          </div>
+        }
+      >
+        {byDay.length === 0 && <Empty icon="🪙">这个月（或这个筛选下）还没有流水。</Empty>}
         {byDay.map(([day, entries]) => (
           <div key={day} className="ledger-day">
-            <div className="ledger-date">{day === dayKey() ? '今天' : fmtShort(day)}</div>
+            <div className="ledger-date">{day === t ? '今天' : fmtShort(day)}</div>
             <ul className="ledger-list">
               {entries.map((e) => (
                 <li key={e.id} className={`ledger-item ${e.type}`}>
@@ -132,6 +215,13 @@ export default function Ledger() {
             </ul>
           </div>
         ))}
+      </Panel>
+
+      <Panel title="每月预算" icon="🧮">
+        <p className="muted">给常花的分类设个月预算，花超了进度条会变红提醒你（只提醒，不指责）。</p>
+        <div className="budgets">
+          {CATS_OUT.filter((c) => c.id !== '其他').map((c) => budgetRow(c.id))}
+        </div>
       </Panel>
     </>
   )

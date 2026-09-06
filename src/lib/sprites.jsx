@@ -259,14 +259,153 @@ const PLANT_TOPS = {
     '.....GG.....',
     '.....GG.....',
   ],
+  // ---- v2 新植物（生长阶段共用 p0-p3，绽放各有真身） ----
+  bloom_cactus: [
+    '.....ff.....',
+    '....ffff....',
+    '.....GG.....',
+    '.....GG.....',
+    '..GG.GG.GG..',
+    '..GG.GG.GG..',
+    '..GGGGGGGG..',
+    '.....GG.....',
+    '.....GG.....',
+  ],
+  bloom_lavender: [
+    '..vv.vv.vv..',
+    '..vv.vv.vv..',
+    '..vv.vv.vv..',
+    '..G..G..G...',
+    '..G..G..G...',
+    '..G..G..G...',
+    '..G..G..G...',
+    '..G..G..G...',
+    '..G..G..G...',
+  ],
+  bloom_mushroom: [
+    '....RRRR....',
+    '..RRRRRRRR..',
+    '..RwRRRRwR..',
+    '.RRRRwwRRRR.',
+    '.RRRRRRRRRR.',
+    '....cccc....',
+    '....cccc....',
+    '...cccccc...',
+    '...cccccc...',
+  ],
 }
+
+// 空花盆：植物是 14 行（顶 9 + 盆 5），空盆也补齐 9 行空白保持卡片高度一致
+SPRITES.pot_empty = {
+  pal: { ...POT_PAL, s: C.potD },
+  rows: [...Array(9).fill('............'), ...POT_ROWS],
+}
+
 // 顶部 9 行 + 花盆 5 行 = 14 行
 for (const [name, top] of Object.entries(PLANT_TOPS)) {
   SPRITES[name] = {
-    pal: { ...POT_PAL, G: C.greenD, d: C.greenDD, f: C.pink, F: C.red, y: C.gold, o: C.orange, r: C.red, s: C.potD },
+    pal: { ...POT_PAL, G: C.greenD, d: C.greenDD, f: C.pink, F: C.red, y: C.gold, o: C.orange, r: C.red, s: C.potD, v: '#a488d0', w: C.white, c: '#f3e2b8' },
     rows: [...top, ...POT_ROWS],
   }
 }
+
+// 品种 id 是 sunflower，但绽放图历史名叫 bloom_sun（顶栏也在用）——补一个别名，
+// 否则 `bloom_${kind}` 拼出 bloom_sunflower 会找不到精灵（v2 图鉴踩中的 v1 遗留坑）
+SPRITES.bloom_sunflower = SPRITES.bloom_sun
+
+// ---- 商店装饰 / 阿咕帽子 / 奖杯 ----
+Object.assign(SPRITES, {
+  decor_fence: {
+    pal: V({ q: C.potD, p: C.potL }),
+    rows: [
+      'q..q..q..q..',
+      'q..q..q..q..',
+      'qqqqqqqqqqq.',
+      'ppppppppppp.',
+      'q..q..q..q..',
+      'q..q..q..q..',
+    ],
+  },
+  decor_scare: {
+    pal: V({ s: C.gold, c: '#ffe8c2', r: C.red, q: C.potD }),
+    rows: [
+      '....ssss....',
+      '.....ss.....',
+      '....cccc....',
+      '.qqqccccqqq.',
+      '....rrrr....',
+      '....rrrr....',
+      '.....qq.....',
+      '.....qq.....',
+      '.....qq.....',
+    ],
+  },
+  decor_lamp: {
+    pal: V({ g: C.gold, q: C.potD }),
+    rows: [
+      '.....gg.....',
+      '.....gg.....',
+      '....qqqq....',
+      '.....qq.....',
+      '.....qq.....',
+      '.....qq.....',
+      '.....qq.....',
+      '...qqqqqq...',
+      '..qqqqqqqq..',
+    ],
+  },
+  decor_pond: {
+    pal: V({ b: C.blue, w: C.white }),
+    rows: [
+      '...bbbbbb...',
+      '..bbwwbbbb..',
+      '.bbbbbbbbbb.',
+      '..bbbbbbbb..',
+      '...bbbbbb...',
+    ],
+  },
+  hat_leaf: {
+    pal: V({ G: C.greenD }),
+    rows: [
+      '...GG...',
+      '.GGGGGG.',
+      'GGGGGGGG',
+      '...GG...',
+    ],
+  },
+  hat_berry: {
+    pal: V({ F: C.red, f: C.pink }),
+    rows: [
+      '...FF...',
+      '.FFFFFF.',
+      'FFFFFFFF',
+      '.f....f.',
+    ],
+  },
+  hat_crown: {
+    pal: V({ a: C.gold }),
+    rows: [
+      'a..a..a.',
+      'a..a..a.',
+      'aaaaaaaa',
+      'aaaaaaaa',
+    ],
+  },
+  trophy: {
+    pal: V({ a: C.gold, b: C.goldD }),
+    rows: [
+      '.aaaaaaaa.',
+      'aaaaaaaaaa',
+      'aaaaaaaaaa',
+      '.aaaaaaaa.',
+      '..aaaaaa..',
+      '...aaaa...',
+      '...aaaa...',
+      '..bbbbbb..',
+      '.bbbbbbbb.',
+    ],
+  },
+})
 
 // ---- 心情脸（10x9，程序化生成 5 档表情） ----
 function face(mouth, { tear = false, blush = true } = {}) {

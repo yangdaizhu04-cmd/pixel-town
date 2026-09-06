@@ -1,5 +1,3 @@
-import { dayKey } from './dates.js'
-
 // ---------- 全局事件总线（toast / confetti / levelup） ----------
 export const bus = new EventTarget()
 export const emit = (type, detail) => bus.dispatchEvent(new CustomEvent(type, { detail }))
@@ -75,6 +73,8 @@ export function sfx(name) {
       case 'levelup': [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.14)); break
       case 'pop': tone(440, 0, 0.05); break
       case 'oops': tone(220, 0, 0.12, 0.03); break
+      case 'alarm': [880, 880, 1175].forEach((f, i) => tone(f, i * 0.18, 0.16)); break
+      case 'buy': tone(659, 0, 0.07); tone(988, 0.07, 0.07); tone(1319, 0.14, 0.12); break
       default: break
     }
   } catch { /* 音频不可用时静默 */ }

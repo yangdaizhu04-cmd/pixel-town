@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { dayKey, addDays, monthKey } from './dates.js'
+import { dayKey, addDays, monthKey, daysBetween } from './dates.js'
 import { xpNeeded } from './gamify.js'
 
 // ---------- 植物生长 ----------
@@ -19,8 +19,12 @@ const uid = () => Math.random().toString(36).slice(2, 9)
 function seed() {
   const t = dayKey()
   const d = (n) => addDays(t, -n)
+  // 演示用历史 XP：过去 24 天有起有伏，让热力图第一眼就有「生活感」
+  const xpLog = {}
+  const pattern = [40, 66, 0, 125, 88, 30, 52, 0, 95, 130, 45, 10, 70, 25, 0, 110, 60, 35, 85, 15, 55, 100, 20, 75]
+  pattern.forEach((v, i) => { xpLog[d(pattern.length - i)] = v })
   return {
-    v: 1,
+    v: 2,
     profile: {
       name: '小镇居民',
       height: 170,
@@ -31,21 +35,34 @@ function seed() {
       lastActiveDay: d(1),
       waterTotal: 23,
       waterLastDay: d(2),
+      // v2 花盆：id 只是盆位，kind 才是植物品种；kind 为空 = 空盆
       pots: [
-        { id: 'sunflower', pts: 10 },
-        { id: 'tulip', pts: 6 },
-        { id: 'berry', pts: 2 },
+        { id: 'pot-1', kind: 'sunflower', pts: 10 },
+        { id: 'pot-2', kind: 'tulip', pts: 6 },
+        { id: 'pot-3', kind: 'berry', pts: 2 },
       ],
+      unlockedKinds: ['sunflower', 'tulip', 'berry'],
+      collection: ['sunflower'],
+      decor: ['fence'],
+      hat: '',
+      achievements: {},
+      weightGoal: null,
+      lastExportDay: '',
+      stats: { todosDone: 12, ledger: 12, pomos: 0 },
     },
+    xpLog,
     xpToday: 55,
     xpTodayDay: t,
     claimed: { [t]: [] },
+    budgets: {},
     todos: [
-      { id: uid(), text: '给小镇写一封本周小结', cat: '工作', prio: true, done: false, day: t },
-      { id: uid(), text: '伸展 5 分钟，看看窗外的云', cat: '生活', prio: false, done: false, day: t },
-      { id: uid(), text: '把明天要用的资料打印好', cat: '工作', prio: false, done: false, day: addDays(t, 1) },
-      { id: uid(), text: '读完《深度工作》第 3 章', cat: '学习', prio: false, done: true, day: t },
-      { id: uid(), text: '回复合作邮件', cat: '工作', prio: false, done: true, day: d(1) },
+      { id: uid(), text: '给小镇写一封本周小结', cat: '工作', prio: true, done: false, day: t, repeat: '' },
+      { id: uid(), text: '伸展 5 分钟，看看窗外的云', cat: '生活', prio: false, done: false, day: t, repeat: '' },
+      { id: uid(), text: '把明天要用的资料打印好', cat: '工作', prio: false, done: false, day: addDays(t, 1), repeat: '' },
+      { id: uid(), text: '读完《深度工作》第 3 章', cat: '学习', prio: false, done: true, day: t, repeat: '' },
+      { id: uid(), text: '回复合作邮件', cat: '工作', prio: false, done: true, day: d(1), repeat: '' },
+      { id: uid(), text: '睡前把明天的水杯装满', cat: '生活', prio: false, done: false, day: t, repeat: 'daily', lastDone: '' },
+      { id: uid(), text: '给阿咕的小花园拍张照', cat: '生活', prio: false, done: false, day: t, repeat: 'weekly', lastDone: '' },
     ],
     ledger: [
       { id: uid(), day: t, type: 'out', amount: 25, cat: '餐饮', note: '晚饭·食堂' },
@@ -77,7 +94,8 @@ function seed() {
         sessions: [{ day: d(4), min: 30, note: '' }, { day: d(2), min: 45, note: '播客' }, { day: d(1), min: 75, note: '' }],
       },
     ],
-    english: { known: [], queue: [], right: 0, wrong: 0 },
+    // v2 生词本：queue 从 string 升级为 { w, due, interval }（简化间隔重复）
+    english: { known: [], queue: [], right: 0, wrong: 0, custom: [] },
     weights: [64.2, 64.1, 64.3, 64.0, 63.9, 64.0, 63.8, 63.9, 63.7, 63.6, 63.7, 63.5, 63.6, 63.4, 63.3]
       .map((kg, i) => ({ day: d(14 - i), kg })),
     reviews: {
@@ -93,11 +111,70 @@ function seed() {
       baseUrl: 'https://api.deepseek.com/v1',
       model: 'deepseek-chat',
       sound: true,
+      city: '',
+      webdavUrl: '',
+      webdavUser: '',
+      webdavPass: '',
     },
   }
 }
 
-// ---------- Reducer ----------
+// ---------- 存档迁移（旧档 → 当前结构） ----------
+// 规则：合并出完整对象后再逐版本升级；v 字段只增不减。
+// 历史坑（见交接文档）：load() 曾只做浅合并，新字段在旧档里是 undefined 会导致页面崩。
+export function hydrate(parsed) {
+  const base = seed()
+  if (!parsed || typeof parsed !== 'object' || !parsed.profile) return base
+  let s = {
+    ...base,
+    ...parsed,
+    profile: { ...base.profile, ...parsed.profile },
+    settings: { ...base.settings, ...parsed.settings },
+    english: { ...base.english, ...parsed.english },
+  }
+  const v = s.v || 1
+  if (v < 2) {
+    s = {
+      ...s,
+      v: 2,
+      // v1 的 pots 里 id 就是品种名（sunflower/tulip/berry），v2 拆成 盆位 id + kind
+      profile: {
+        ...s.profile,
+        pots: (s.profile.pots || []).map((x, i) => ({ id: x.id || `pot-${i + 1}`, kind: x.kind || x.id, pts: x.pts || 0 })),
+        unlockedKinds: s.profile.unlockedKinds || ['sunflower', 'tulip', 'berry'],
+        collection: s.profile.collection || [],
+        decor: s.profile.decor || [],
+        hat: s.profile.hat || '',
+        achievements: s.profile.achievements || {},
+        weightGoal: s.profile.weightGoal ?? null,
+        lastExportDay: s.profile.lastExportDay || '',
+        stats: s.profile.stats || { todosDone: 0, ledger: (s.ledger || []).length, pomos: 0 },
+      },
+      xpLog: s.xpLog || {},
+      budgets: s.budgets || {},
+      todos: (s.todos || []).map((x) => ({ ...x, repeat: x.repeat || '', lastDone: x.lastDone || '' })),
+      english: {
+        ...s.english,
+        custom: s.english.custom || [],
+        // v1 生词本是 string 数组，v2 是 { w, due, interval }
+        queue: (s.english.queue || []).map((q) => (typeof q === 'string' ? { w: q, due: dayKey(), interval: 0 } : q)),
+      },
+    }
+  }
+  return s
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return seed()
+    return hydrate(JSON.parse(raw))
+  } catch {
+    return seed()
+  }
+}
+
+// ---------- Reducer（纯函数：副作用一律走事件总线） ----------
 function reducer(s, a) {
   const t = dayKey()
   const P = { ...s.profile }
@@ -114,14 +191,20 @@ function reducer(s, a) {
         P.streak = P.lastActiveDay === addDays(t, -1) ? P.streak + 1 : 1
         P.lastActiveDay = t
       }
-      // 自动浇水：完成事情会让花园长一点
+      // 自动浇水：完成事情会让花园长一点；若因此盛开，顺手记进图鉴
       const pots = P.pots.map((x) => ({ ...x }))
-      const target = [...pots].sort((x, y) => x.pts - y.pts)[0]
-      if (target && target.pts < BLOOM_PTS) target.pts += 1
+      const target = [...pots].filter((x) => x.kind).sort((x, y) => x.pts - y.pts)[0]
+      if (target && target.pts < BLOOM_PTS) {
+        target.pts += 1
+        if (target.pts >= BLOOM_PTS && !(P.collection || []).includes(target.kind)) {
+          P.collection = [...(P.collection || []), target.kind]
+        }
+      }
       P.pots = pots
       P.waterTotal = (P.waterTotal || 0) + 1
+      const xpLog = { ...(s.xpLog || {}), [t]: (s.xpLog?.[t] || 0) + (a.xp || 0) }
       const xpTodayDay = s.xpTodayDay === t ? s.xpTodayDay : t
-      return { ...s, profile: P, xpToday: s.xpTodayDay === t ? s.xpToday + (a.xp || 0) : (a.xp || 0), xpTodayDay }
+      return { ...s, profile: P, xpLog, xpToday: s.xpTodayDay === t ? s.xpToday + (a.xp || 0) : (a.xp || 0), xpTodayDay }
     }
 
     case 'MILESTONE_CLAIM': {
@@ -134,9 +217,14 @@ function reducer(s, a) {
     case 'WATER': {
       if ((a.cost || 0) > P.coins) return s
       const pots = P.pots.map((x) => ({ ...x }))
-      const target = [...pots].sort((x, y) => x.pts - y.pts)[0]
+      const target = [...pots].filter((x) => x.kind).sort((x, y) => x.pts - y.pts)[0]
       const grown = target && target.pts < BLOOM_PTS
-      if (target && grown) target.pts += 1
+      if (target && grown) {
+        target.pts += 1
+        if (target.pts >= BLOOM_PTS && !(P.collection || []).includes(target.kind)) {
+          P.collection = [...(P.collection || []), target.kind]
+        }
+      }
       P.pots = pots
       P.waterTotal = (P.waterTotal || 0) + 1
       P.waterLastDay = t
@@ -144,20 +232,101 @@ function reducer(s, a) {
       return { ...s, profile: P, justGrew: grown ? target.id : null }
     }
 
+    // ---------- 商店 ----------
+    case 'SHOP_BUY': {
+      if (P.coins < a.cost) return s
+      P.coins -= a.cost
+      if (a.goods === 'pot') {
+        const n = P.pots.length + 1
+        P.pots = [...P.pots, { id: `pot-${n}-${uid().slice(0, 3)}`, kind: '', pts: 0 }]
+      } else if (a.goods === 'seed') {
+        P.unlockedKinds = [...(P.unlockedKinds || []), a.id]
+      } else if (a.goods === 'decor') {
+        P.decor = [...(P.decor || []), a.id]
+      } else if (a.goods === 'hat') {
+        P.hat = a.id
+      }
+      return { ...s, profile: P }
+    }
+    // 把一粒已解锁的种子种进空盆
+    case 'PLANT_POT': {
+      if (!(P.unlockedKinds || []).includes(a.kind)) return s
+      return {
+        ...s,
+        profile: { ...P, pots: P.pots.map((x) => (x.id === a.potId && !x.kind ? { ...x, kind: a.kind, pts: 0 } : x)) },
+      }
+    }
+    // 采集盛开的植物：盆清空，换金币，品种进图鉴
+    case 'HARVEST': {
+      const pot = P.pots.find((x) => x.id === a.potId)
+      if (!pot || !pot.kind || pot.pts < BLOOM_PTS) return s
+      return {
+        ...s,
+        profile: {
+          ...P,
+          coins: P.coins + a.coins,
+          pots: P.pots.map((x) => (x.id === a.potId ? { ...x, kind: '', pts: 0 } : x)),
+          collection: (P.collection || []).includes(pot.kind) ? P.collection : [...(P.collection || []), pot.kind],
+        },
+      }
+    }
+
+    // ---------- 成就 ----------
+    case 'ACH_UNLOCK': {
+      if (P.achievements?.[a.id]) return s
+      return { ...s, profile: { ...P, coins: P.coins + (a.coins || 0), achievements: { ...P.achievements, [a.id]: t } } }
+    }
+
+    // ---------- 待办（v2 支持重复待办） ----------
     case 'TODO_ADD':
-      return { ...s, todos: [{ id: uid(), text: a.text, cat: a.cat || '生活', prio: !!a.prio, done: false, day: a.day || t }, ...s.todos] }
-    case 'TODO_TOGGLE':
-      return { ...s, todos: s.todos.map((x) => (x.id === a.id ? { ...x, done: !x.done } : x)) }
+      return {
+        ...s,
+        todos: [{ id: uid(), text: a.text, cat: a.cat || '生活', prio: !!a.prio, done: false, day: a.day || t, repeat: a.repeat || '', lastDone: '' }, ...s.todos],
+      }
+    case 'TODO_TOGGLE': {
+      const todo = s.todos.find((x) => x.id === a.id)
+      if (!todo) return s
+      // 重复待办：翻转的是「今天做没做」（lastDone），本体永远留在清单里
+      if (todo.repeat) {
+        const clickedDay = a.day || t
+        const undo = todo.lastDone === clickedDay
+        return {
+          ...s,
+          todos: s.todos.map((x) => (x.id === a.id ? { ...x, lastDone: undo ? '' : clickedDay } : x)),
+          profile: undo ? s.profile : { ...P, stats: { ...P.stats, todosDone: (P.stats?.todosDone || 0) + 1 } },
+        }
+      }
+      const nowDone = !todo.done
+      return {
+        ...s,
+        todos: s.todos.map((x) => (x.id === a.id ? { ...x, done: nowDone } : x)),
+        profile: nowDone ? { ...P, stats: { ...P.stats, todosDone: (P.stats?.todosDone || 0) + 1 } } : s.profile,
+      }
+    }
+    case 'TODO_POSTPONE':
+      return { ...s, todos: s.todos.map((x) => (x.id === a.id ? { ...x, day: a.day } : x)) }
     case 'TODO_DEL':
       return { ...s, todos: s.todos.filter((x) => x.id !== a.id) }
     case 'TODO_CLEAR_DONE':
       return { ...s, todos: s.todos.filter((x) => !(x.done && x.day === t)) }
 
+    // ---------- 账本（v2 加预算） ----------
     case 'LEDGER_ADD':
-      return { ...s, ledger: [{ id: uid(), day: a.day || t, type: a.dir, amount: a.amount, cat: a.cat, note: a.note || '' }, ...s.ledger] }
+      return {
+        ...s,
+        ledger: [{ id: uid(), day: a.day || t, type: a.dir, amount: a.amount, cat: a.cat, note: a.note || '' }, ...s.ledger],
+        profile: { ...P, stats: { ...P.stats, ledger: (P.stats?.ledger || 0) + 1 } },
+      }
     case 'LEDGER_DEL':
       return { ...s, ledger: s.ledger.filter((x) => x.id !== a.id) }
+    case 'BUDGET_SET': {
+      const b = { ...(s.budgets || {}) }
+      if (a.amount > 0) b[a.cat] = a.amount
+      else delete b[a.cat]
+      return { ...s, budgets: b }
+    }
 
+    // ---------- 习惯 ----------
     case 'HABIT_ADD':
       return { ...s, habits: [...s.habits, { id: uid(), name: a.name, icon: a.icon, color: a.color || 'green', days: {} }] }
     case 'HABIT_TOGGLE': {
@@ -175,6 +344,7 @@ function reducer(s, a) {
     case 'HABIT_DEL':
       return { ...s, habits: s.habits.filter((h) => h.id !== a.id) }
 
+    // ---------- 学习 ----------
     case 'STUDY_ADD':
       return { ...s, study: [...s.study, { id: uid(), title: a.title, targetH: a.targetH || 10, deadline: a.deadline || '', sessions: [] }] }
     case 'STUDY_LOG':
@@ -186,18 +356,58 @@ function reducer(s, a) {
       }
     case 'STUDY_DEL':
       return { ...s, study: s.study.filter((p) => p.id !== a.id) }
+    // 番茄钟完成：可挂在学习计划上，也可以只是自由专注
+    case 'POMO_DONE': {
+      const NP = { ...P, stats: { ...P.stats, pomos: (P.stats?.pomos || 0) + 1 } }
+      if (!a.planId) return { ...s, profile: NP }
+      return {
+        ...s,
+        profile: NP,
+        study: s.study.map((p) => (p.id === a.planId
+          ? { ...p, sessions: [...p.sessions, { day: t, min: a.min, note: a.note || '🍅 番茄钟' }] }
+          : p)),
+      }
+    }
 
+    // ---------- 英语（v2：SRS 调度 + 自定义词单） ----------
     case 'ENGLISH_RESULT': {
       const e = { ...s.english }
-      if (a.correct) { e.right += 1; e.queue = e.queue.filter((w) => w !== a.word) } else { e.wrong += 1; if (!e.queue.includes(a.word)) e.queue = [...e.queue, a.word] }
+      if (a.correct) {
+        e.right += 1
+        const ent = e.queue.find((q) => q.w === a.word)
+        if (ent) {
+          const interval = Math.min(180, Math.max(1, (ent.interval || 0) * 2))
+          // 连对到 7 天以上就算「毕业」，从生词本移出
+          if (interval >= 7) e.queue = e.queue.filter((q) => q.w !== a.word)
+          else e.queue = e.queue.map((q) => (q.w === a.word ? { ...q, interval, due: addDays(t, interval) } : q))
+        }
+      } else {
+        e.wrong += 1
+        const ent = e.queue.find((q) => q.w === a.word)
+        if (ent) e.queue = e.queue.map((q) => (q.w === a.word ? { ...q, interval: 0, due: t } : q))
+        else e.queue = [...e.queue, { w: a.word, interval: 0, due: t }]
+      }
       return { ...s, english: e }
     }
     case 'ENGLISH_KNOWN': {
       const e = { ...s.english }
-      if (a.known) { if (!e.known.includes(a.word)) e.known = [...e.known, a.word]; e.queue = e.queue.filter((w) => w !== a.word) } else { e.known = e.known.filter((w) => w !== a.word) }
+      if (a.known) {
+        if (!e.known.includes(a.word)) e.known = [...e.known, a.word]
+        e.queue = e.queue.filter((q) => q.w !== a.word)
+      } else {
+        e.known = e.known.filter((w) => w !== a.word)
+      }
       return { ...s, english: e }
     }
+    case 'ENGLISH_IMPORT': {
+      const have = new Set([...(s.english.custom || []).map((x) => x.w)])
+      const add = (a.words || []).filter((x) => x.w && !have.has(x.w))
+      return { ...s, english: { ...s.english, custom: [...(s.english.custom || []), ...add] } }
+    }
+    case 'ENGLISH_CUSTOM_DEL':
+      return { ...s, english: { ...s.english, custom: (s.english.custom || []).filter((x) => x.w !== a.w) } }
 
+    // ---------- 体重 ----------
     case 'WEIGHT_ADD': {
       const rest = s.weights.filter((x) => x.day !== a.day)
       return { ...s, weights: [...rest, { day: a.day, kg: a.kg }].sort((x, y) => (x.day < y.day ? -1 : 1)) }
@@ -218,23 +428,11 @@ function reducer(s, a) {
     case 'CHAT_CLEAR':
       return { ...s, chat: [] }
 
-    case 'IMPORT': return { ...a.state }
+    case 'EXPORT_MARK':
+      return { ...s, profile: { ...P, lastExportDay: t } }
+    case 'IMPORT': return hydrate(a.state)
     case 'RESET': return seed()
     default: return s
-  }
-}
-
-// ---------- 持久化 ----------
-function load() {
-  try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (!raw) return seed()
-    const parsed = JSON.parse(raw)
-    if (!parsed || !parsed.profile) return seed()
-    const base = seed()
-    return { ...base, ...parsed, profile: { ...base.profile, ...parsed.profile }, settings: { ...base.settings, ...parsed.settings } }
-  } catch {
-    return seed()
   }
 }
 
@@ -257,8 +455,17 @@ export function AppProvider({ children }) {
 export const useApp = () => useContext(Ctx)
 
 // ---------- 常用查询 ----------
-export const todosOpen = (s) => s.todos.filter((x) => !x.done && x.day <= dayKey())
-export const todosDoneToday = (s) => s.todos.filter((x) => x.done && x.day === dayKey())
+// 待办是否「今天该出现」：普通待办看 day，重复待办看 lastDone
+export const isDue = (x, t = dayKey()) => {
+  if (x.repeat === 'daily') return x.lastDone !== t
+  if (x.repeat === 'weekly') return !x.lastDone || daysBetween(x.lastDone, t) >= 7
+  return !x.done && x.day <= t
+}
+export const todosOpen = (s) => s.todos.filter((x) => isDue(x))
+export const todosDoneToday = (s) => {
+  const t = dayKey()
+  return s.todos.filter((x) => (x.done && x.day === t) || (x.repeat && x.lastDone === t))
+}
 
 export const habitStreak = (h) => {
   let k = dayKey()

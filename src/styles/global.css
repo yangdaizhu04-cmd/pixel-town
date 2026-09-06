@@ -560,6 +560,116 @@ textarea { resize: vertical; width: 100%; }
 .empty { text-align: center; padding: 26px 10px; color: var(--ink2); font-size: 14px; }
 .empty-icon { font-size: 30px; display: block; margin-bottom: 8px; }
 
+/* ---------- v2：确认框 / 月份导航（账本 & 月历共用） ---------- */
+.confirm-msg { font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+.month-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.month-nav b { font-size: 14px; }
+.ledger-filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ledger-filters select { font-size: 13px; padding: 5px 8px; }
+
+/* ---------- v2：阿咕帽子 ---------- */
+.bird-wrap { position: relative; display: inline-flex; }
+.bird-hat { position: absolute; top: -26%; left: 50%; transform: translateX(-50%); pointer-events: none; }
+
+/* ---------- v2：番茄钟 ---------- */
+.pomo { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.pomo-clock {
+  position: relative; flex: 0 0 auto; width: 190px; text-align: center; padding: 22px 12px; margin-bottom: 0;
+  background: var(--sand);
+}
+.pomo-clock.on { background: var(--green-pale); box-shadow: 0 -3px 0 0 var(--green-d), 0 3px 0 0 var(--green-d), -3px 0 0 0 var(--green-d), 3px 0 0 0 var(--green-d), 0 7px 0 0 var(--shadow); }
+.pomo-time { display: block; font-size: 40px; font-weight: bold; letter-spacing: 3px; text-shadow: 2px 2px 0 var(--gold); }
+.pomo-hint { display: block; font-size: 12px; color: var(--ink2); margin-top: 6px; }
+.pomo-bird { position: absolute; top: -30px; right: -8px; }
+.pomo-ctrl { flex: 1; min-width: 220px; }
+.pomo-badge {
+  position: fixed; left: 22px; bottom: 22px; z-index: 150;
+  background: var(--paper); border: none; font-family: inherit; font-size: 14px; font-weight: bold; color: var(--ink);
+  padding: 8px 12px; border-radius: 4px;
+  box-shadow: 0 -3px 0 0 var(--red-d), 0 3px 0 0 var(--red-d), -3px 0 0 0 var(--red-d), 3px 0 0 0 var(--red-d), 0 6px 0 0 var(--shadow);
+}
+.pomo-badge.run { background: var(--gold); }
+
+/* ---------- v2：英语（发音 / 词单） ---------- */
+.tts-btn {
+  background: var(--paper2); border: none; font-family: inherit; font-size: 12px; color: var(--blue-d);
+  padding: 3px 8px; border-radius: 2px; margin: 0 2px;
+  box-shadow: 0 -2px 0 0 var(--sand2), 0 2px 0 0 var(--sand2), -2px 0 0 0 var(--sand2), 2px 0 0 0 var(--sand2);
+}
+.tts-btn:hover { background: var(--blue-pale); }
+.quiz-review { margin-bottom: 10px; }
+.import-area {
+  width: 100%; min-height: 120px; font-size: 13px; line-height: 1.7; resize: vertical;
+}
+.custom-title { font-size: 14px; margin: 14px 0 8px; }
+
+/* ---------- v2：商店 ---------- */
+.shop-coins { font-size: 14px; margin-bottom: 12px; }
+.shop-tabs { margin-bottom: 14px; }
+.shop-list { display: flex; flex-direction: column; gap: 8px; }
+.shop-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 0; }
+.shop-item.owned { opacity: 0.65; }
+.shop-info { flex: 1; display: flex; flex-direction: column; }
+.shop-info b { font-size: 15px; }
+.shop-desc { font-size: 12px; color: var(--ink2); }
+
+/* ---------- v2：年鉴（热力图 / 图鉴 / 成就墙） ---------- */
+.heatmap-wrap { overflow-x: auto; padding-bottom: 4px; }
+.heatmap-legend { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--ink2); margin-top: 8px; }
+.heat-keys { display: inline-flex; align-items: center; gap: 3px; }
+.heat-keys i { width: 14px; height: 14px; display: inline-block; box-shadow: 0 -2px 0 0 var(--sand2), 0 2px 0 0 var(--sand2), -2px 0 0 0 var(--sand2), 2px 0 0 0 var(--sand2); }
+.dex-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dex-item { text-align: center; padding: 14px 8px; margin-bottom: 0; }
+.dex-item b { display: block; margin-top: 6px; font-size: 14px; }
+.dex-note { display: block; font-size: 12px; color: var(--ink2); margin-top: 4px; }
+.ach-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.ach-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 0; }
+.ach-item.on { background: var(--sand); }
+.ach-icon { font-size: 22px; }
+.ach-info { display: flex; flex-direction: column; }
+.ach-info b { font-size: 14px; }
+.ach-info span { font-size: 12px; color: var(--ink2); }
+
+/* ---------- v2：花园（空盆种植 / 装饰 / 天气标签） ---------- */
+.pot-plant-pick { display: flex; flex-direction: column; gap: 8px; align-items: center; margin-top: 10px; }
+.pot-plant-pick select { font-size: 13px; }
+.garden-decor {
+  display: flex; gap: 14px; align-items: flex-end; justify-content: center; flex-wrap: wrap;
+  margin-top: 14px; padding: 10px;
+  background: var(--green-pale); border-radius: 4px;
+}
+.weather-tag { margin-left: 8px; font-size: 12px; }
+
+/* ---------- v2：心情月历 ---------- */
+.mood-month { margin-bottom: 6px; }
+.mood-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
+.mood-grid-head { text-align: center; font-size: 12px; color: var(--ink2); }
+.mood-cell {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  background: var(--paper2); border: none; font-family: inherit; font-size: 12px; color: var(--ink2); padding: 2px; border-radius: 2px;
+  box-shadow: 0 -2px 0 0 var(--sand2), 0 2px 0 0 var(--sand2), -2px 0 0 0 var(--sand2), 2px 0 0 0 var(--sand2);
+}
+.mood-cell.has { background: var(--pink-pale); color: var(--ink); }
+.mood-cell.today { box-shadow: 0 -2px 0 0 var(--gold-d), 0 2px 0 0 var(--gold-d), -2px 0 0 0 var(--gold-d), 2px 0 0 0 var(--gold-d); }
+
+/* ---------- v2：预算 ---------- */
+.budgets { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.budget-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.budget-cat { width: 88px; font-size: 13px; }
+.budget-row input { width: 90px; padding: 5px 8px; font-size: 13px; }
+.budget-bar {
+  flex: 1; min-width: 160px; height: 18px; position: relative;
+  background: #efe3c4; border-radius: 3px; overflow: hidden;
+  box-shadow: inset 0 2px 0 rgba(74, 59, 42, 0.15);
+}
+.budget-fill { height: 100%; background: var(--green); transition: width 0.4s ease; }
+.budget-bar.over .budget-fill { background: var(--red); }
+.budget-bar span {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--ink);
+}
+.budget-hint { font-size: 12px; color: var(--ink2); }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
@@ -570,6 +680,7 @@ textarea { resize: vertical; width: 100%; }
   .stat-grid { grid-template-columns: repeat(3, 1fr); }
   .gift-row { grid-template-columns: repeat(2, 1fr); }
   .garden { grid-template-columns: repeat(3, 1fr); }
+  .dex-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 620px) {
   .app { padding: 12px 12px 70px; }
@@ -578,6 +689,9 @@ textarea { resize: vertical; width: 100%; }
   .quiz-options { grid-template-columns: 1fr; }
   .mood-week { flex-wrap: wrap; }
   .mood-day { min-width: 60px; }
+  .dex-grid { grid-template-columns: repeat(2, 1fr); }
+  .ach-grid { grid-template-columns: 1fr; }
+  .pomo-clock { width: 100%; }
 }
 
 /* ---------- 减少动效 ---------- */

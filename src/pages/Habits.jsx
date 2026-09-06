@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useApp, habitStreak } from '../lib/store.jsx'
-import { Panel, Btn, Empty, Chip } from '../components/ui.jsx'
+import { Panel, Btn, Empty, Chip, confirmBox } from '../components/ui.jsx'
 import { REWARDS, reward, sfx } from '../lib/gamify.js'
 import { dayKey, lastNDays, fmtShort, WEEKDAYS } from '../lib/dates.js'
 
@@ -62,7 +62,7 @@ export default function Habits() {
                   <div className="habit-name-cell">
                     <span className="habit-icon">{h.icon}</span>
                     <span className="habit-name">{h.name}</span>
-                    <button className="del" title="删除习惯" onClick={() => { if (confirm(`删除习惯「${h.name}」？它的打卡记录也会一起消失哦`)) { dispatch({ type: 'HABIT_DEL', id: h.id }); sfx('oops') } }}>×</button>
+                    <button className="del" title="删除习惯" onClick={async () => { if (await confirmBox({ title: '删除习惯', message: `删除习惯「${h.name}」？它的打卡记录也会一起消失哦`, danger: true, okText: '删除' })) { dispatch({ type: 'HABIT_DEL', id: h.id }); sfx('oops') } }}>×</button>
                   </div>
                   {days.map((d) => {
                     const checked = !!h.days[d]

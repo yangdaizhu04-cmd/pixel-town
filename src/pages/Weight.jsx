@@ -1,9 +1,16 @@
 import React, { useState } from 'react'
 import { useApp, lastWeight, bmiOf } from '../lib/store.jsx'
-import { Panel, Btn, Chip, Empty } from '../components/ui.jsx'
+import { Panel, Btn, Chip, Empty, Field } from '../components/ui.jsx'
 import { Line } from '../lib/charts.jsx'
 import { REWARDS, reward, sfx, emit } from '../lib/gamify.js'
 import { dayKey, fmtShort } from '../lib/dates.js'
+
+// 7 日移动平均：比单点曲线更「宽恕」日常波动，看到的是趋势而不是噪音
+const movingAvg = (arr, win = 7) =>
+  arr.map((_, i) => {
+    const slice = arr.slice(Math.max(0, i - win + 1), i + 1)
+    return +(slice.reduce((m, x) => m + x, 0) / slice.length).toFixed(1)
+  })
 
 export default function Weight() {
   const { state, dispatch } = useApp()
@@ -14,6 +21,7 @@ export default function Weight() {
   const delta = latest && prev ? +(latest.kg - prev.kg).toFixed(1) : null
   const bmi = bmiOf(state)
   const loggedToday = state.weights.some((x) => x.day === t)
+  const goal = state.profile.weightGoal
 
   const first = state.weights[0]
   const lost = first ? +(first.kg - (latest ? latest.kg : first.kg)).toFixed(1) : 0
@@ -26,10 +34,18 @@ export default function Weight() {
     setKg('')
     sfx('check')
     if (isNew) reward(dispatch, { ...REWARDS.weight, msg: '体重已记录', icon: '⚖️' })
-    else emitToast('已更新今天的体重')
+    else emit('toast', { icon: '⚖️', text: '已更新今天的体重' })
+  }
+
+  const setGoal = (v) => {
+    const num = +v
+    dispatch({ type: 'PROFILE_SET', patch: { weightGoal: num >= 20 && num <= 300 ? num : null } })
+    sfx('pop')
   }
 
   const bmiLabel = bmi == null ? '' : bmi < 18.5 ? '偏轻' : bmi < 24 ? '正好' : bmi < 28 ? '偏重' : '该动动了'
+  const series = state.weights.slice(-21)
+  const trend = movingAvg(series.map((x) => x.kg))
 
   return (
     <>
@@ -66,14 +82,30 @@ export default function Weight() {
           />
           <Btn color="green" onClick={save}>＋ 上秤！</Btn>
         </div>
+        <div className="form-row">
+          <Field label="目标体重 kg（可选，画在曲线里）">
+            <input type="number" step="0.1" placeholder={goal ? `${goal}` : '比如 62'} value={goal ?? ''} onChange={(e) => setGoal(e.target.value)} />
+          </Field>
+        </div>
         <p className="muted">数字只是参考，好好吃饭、好好睡觉比什么都重要 🌙</p>
       </Panel>
 
       <Panel title="体重曲线" icon="📉">
-        <Line data={state.weights.slice(-21).map((x) => x.kg)} rows={14} scale={12} color="orange" />
-        {state.weights.length > 1 && (
+        <Line
+          data={series.map((x) => x.kg)}
+          data2={series.length >= 7 ? trend : null}
+          goal={goal}
+          rows={14}
+          scale={12}
+          color="orange"
+        />
+        {series.length > 1 && (
           <div className="line-legend">
-            <span>{fmtShort(state.weights[Math.max(0, state.weights.length - 21)].day)} → {fmtShort(latest.day)}</span>
+            <span>
+              {fmtShort(series[0].day)} → {fmtShort(latest.day)}
+              {series.length >= 7 && ' · 橙=每日 蓝=7日均值'}
+              {goal != null && ' · 绿虚线=目标'}
+            </span>
           </div>
         )}
       </Panel>
@@ -99,8 +131,4 @@ export default function Weight() {
       </Panel>
     </>
   )
-}
-
-function emitToast(text) {
-  emit('toast', { icon: '⚖️', text })
 }

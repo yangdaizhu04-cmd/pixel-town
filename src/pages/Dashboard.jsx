@@ -5,9 +5,12 @@ import {
 } from '../lib/store.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { Panel, Btn, Bar, Chip } from '../components/ui.jsx'
-import { MILESTONES, XP_GOAL, WATER_COST, reward, emit, sfx, emitConfetti } from '../lib/gamify.js'
+import ShopModal from '../components/ShopModal.jsx'
+import { MILESTONES, XP_GOAL, WATER_COST, emit, sfx, emitConfetti } from '../lib/gamify.js'
+import { MAX_POTS, PLANT_META, plantName } from '../lib/shop.js'
 import { useGSAP, gsap, D } from '../lib/anim.js'
-import { greeting, fmtLong, seasonOf, pickByDay, dayKey } from '../lib/dates.js'
+import { greeting, fmtLong, pickByDay, dayKey } from '../lib/dates.js'
+import { fetchWeather } from '../lib/weather.js'
 
 const WEATHERS = [
   { name: '大晴天', sprite: 'sun', copy: '先完成一件小事，快乐会慢慢长出来。' },
@@ -16,7 +19,6 @@ const WEATHERS = [
   { name: '流星夜', sprite: 'star', copy: '今晚有流星，记得许一个具体的小愿望。' },
   { name: '微风', sprite: 'heart', copy: '风把烦恼吹走了一点点，轻装上阵吧。' },
 ]
-const POT_NAMES = { sunflower: '向日葵', tulip: '小郁金香', berry: '小浆果' }
 
 // 数字滚动（仅对数值生效，字符串直接显示）
 function Count({ value }) {
@@ -41,26 +43,41 @@ function Count({ value }) {
 export default function Dashboard() {
   const { state, dispatch } = useApp()
   const rootRef = useRef(null)
+  const [shopOpen, setShopOpen] = useState(false)
+  const [wxLoaded, setWxLoaded] = useState({ city: '', data: null })
   const open = todosOpen(state)
   const doneToday = todosDoneToday(state)
-  const todayTodosTotal = state.todos.filter((x) => x.day === dayKey()).length + open.filter((x) => x.day < dayKey()).length
   const habitsDone = state.habits.filter((h) => h.days[dayKey()]).length
   const w = lastWeight(state)
-  const weather = pickByDay(WEATHERS, 'wx')
+  // 真实天气（设置里填了城市才启用；失败自动回退到小镇预言天气）。
+  // 渲染期按「城市是否已加载完成」派生，不在 effect 里同步 setState。
+  // 注意：weather 的声明必须在上面的 wx 之前——JS 的 const 有暂时性死区，
+  // 顺序反了首屏会直接 ReferenceError 白屏（真实踩坑，见踩坑指南）。
+  const weather = state.settings.city && wxLoaded.city === state.settings.city ? wxLoaded.data : null
+  const wx = weather || pickByDay(WEATHERS, 'wx')
   const claimed = state.claimed[dayKey()] || []
   const freeWater = state.profile.waterLastDay !== dayKey()
+
+  useEffect(() => {
+    const city = state.settings.city
+    if (!city) return
+    let alive = true
+    fetchWeather(city).then((r) => { if (alive) setWxLoaded({ city, data: r }) })
+    return () => { alive = false }
+  }, [state.settings.city])
 
   // 植物升级检测（含自动浇水带来的成长）
   const prevStages = useRef(null)
   useEffect(() => {
     const now = {}
-    state.profile.pots.forEach((p) => { now[p.id] = stageOf(p.pts) })
+    state.profile.pots.forEach((p) => { now[p.id] = p.kind ? stageOf(p.pts) : -1 })
     if (prevStages.current) {
       for (const [id, st] of Object.entries(now)) {
-        if (st > prevStages.current[id]) {
+        if (prevStages.current[id] >= 0 && st > prevStages.current[id]) {
+          const pot = state.profile.pots.find((x) => x.id === id)
           const el = document.getElementById(`pot-${id}`)
           if (el) gsap.fromTo(el, { scale: 0.8, rotation: -6 }, { scale: 1, rotation: 0, duration: D(0.6), ease: 'back.out(2)' })
-          emit('toast', { icon: '🌱', text: `${POT_NAMES[id]}长到了「${STAGE_NAMES[st]}」！` })
+          emit('toast', { icon: '🌱', text: `${plantName(pot?.kind)}长到了「${STAGE_NAMES[st]}」！` })
           sfx('check')
         }
       }
@@ -82,15 +99,30 @@ export default function Dashboard() {
       sfx('oops')
       return
     }
-    const before = [...state.profile.pots].sort((a, b) => a.pts - b.pts)[0]
+    const before = [...state.profile.pots].filter((x) => x.kind).sort((a, b) => a.pts - b.pts)[0]
     dispatch({ type: 'WATER', cost })
     sfx('water')
-    const el = document.getElementById(`pot-${before.id}`)
-    if (el) {
-      gsap.fromTo(el.querySelector('.drop-anim'), { y: -34, autoAlpha: 1 }, { y: 0, autoAlpha: 0, duration: D(0.5), ease: 'power2.in' })
-      gsap.fromTo(el, { y: 4 }, { y: 0, duration: D(0.4), ease: 'back.out(2.5)', delay: D(0.3) })
+    if (before) {
+      const el = document.getElementById(`pot-${before.id}`)
+      if (el) {
+        gsap.fromTo(el.querySelector('.drop-anim'), { y: -34, autoAlpha: 1 }, { y: 0, autoAlpha: 0, duration: D(0.5), ease: 'power2.in' })
+        gsap.fromTo(el, { y: 4 }, { y: 0, duration: D(0.4), ease: 'back.out(2.5)', delay: D(0.3) })
+      }
     }
     emit('toast', { icon: '💧', text: cost ? `花 ${WATER_COST} 金币浇了一次水` : '今天第一次浇水，免费！' })
+  }
+
+  const harvest = (pot) => {
+    dispatch({ type: 'HARVEST', potId: pot.id, coins: 6 })
+    sfx('coin')
+    emitConfetti(20)
+    emit('toast', { icon: '🌼', text: `采下「${plantName(pot.kind)}」的种子，+6 金币！图鉴里已经收录` })
+  }
+
+  const plant = (pot, kind) => {
+    dispatch({ type: 'PLANT_POT', potId: pot.id, kind })
+    sfx('check')
+    emit('toast', { icon: '🌰', text: `种下了一株${plantName(kind)}，等待发芽吧` })
   }
 
   const claim = (m, e) => {
@@ -103,29 +135,34 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { icon: '📝', label: '今日任务', value: `${doneToday.length}/${todayTodosTotal}`, sub: open.length ? `还剩 ${open.length} 件` : '全部完成！' },
+    { icon: '📝', label: '今日任务', value: `${doneToday.length}/${open.length + doneToday.length}`, sub: open.length ? `还剩 ${open.length} 件` : '全部完成！' },
     { icon: '✅', label: '习惯打卡', value: `${habitsDone}/${state.habits.length}`, sub: habitsDone === state.habits.length && state.habits.length ? '全点亮啦' : '点点更健康' },
     { icon: '💰', label: '账本结余', value: `¥${balanceOf(state).toLocaleString()}`, sub: `本月支出 ¥${monthInOut(state).o}` },
     { icon: '⚖️', label: '最新体重', value: w ? `${w.kg}kg` : '--', sub: w ? w.day.slice(5).replace('-', '/') : '去记录一下' },
     { icon: '💧', label: '累计浇水', value: state.profile.waterTotal, sub: `连续投入 ${state.profile.streak} 天` },
   ]
 
+  const emptyPots = state.profile.pots.filter((x) => !x.kind).length
+
   return (
     <div ref={rootRef}>
       <section className="hero card">
         <div>
           <h2>{greeting()}，{state.profile.name}！</h2>
-          <p className="hero-sub">{seasonOf()} · {fmtLong(dayKey())}</p>
+          <p className="hero-sub">{fmtLong(dayKey())}</p>
         </div>
         <Chip color="gold" className="hero-chip">🔥 连续投入 {state.profile.streak} 天</Chip>
       </section>
 
       <Panel className="weather" accent="green">
         <div className="weather-inner">
-          <PixelSprite name={weather.sprite} scale={5} className="weather-sprite" />
+          <PixelSprite name={wx.sprite} scale={5} className="weather-sprite" />
           <div>
-            <h3>今天的小镇天气 · {weather.name}</h3>
-            <p>{weather.copy}</p>
+            <h3>
+              今天的小镇天气 · {wx.name}
+              {weather ? <Chip color="blue" className="weather-tag">{weather.temp}°C · {weather.city}</Chip> : <Chip className="weather-tag">小镇预言 · 填城市看真天气</Chip>}
+            </h3>
+            <p>{wx.copy}</p>
           </div>
         </div>
       </Panel>
@@ -155,7 +192,7 @@ export default function Dashboard() {
                 onClick={(e) => claim(m, e)}
                 title={`${m.at} XP 可领取 · ${m.label}`}
               >
-                {got ? <span className="gift-done">✓</span> : <PixelSprite name="gift" scale={can ? 4 : 4} className={can ? '' : 'dim'} />}
+                {got ? <span className="gift-done">✓</span> : <PixelSprite name="gift" scale={4} className={can ? '' : 'dim'} />}
                 <span className="gift-xp">{m.at} XP</span>
                 <span className="gift-coin">奖赏 +{m.coins} 🪙</span>
               </button>
@@ -165,34 +202,68 @@ export default function Dashboard() {
       </Panel>
 
       <Panel
-        title="我的成长植物园"
-        icon="🌻"
-        extra={<span className="xp-pill">累计浇水 {state.profile.waterTotal} 次</span>}
+        title="我的成长植物园" icon="🌻"
+        extra={
+          <span className="xp-pill">
+            累计浇水 {state.profile.waterTotal} 次{state.profile.pots.length < MAX_POTS ? ` · 花园还可扩建 ${MAX_POTS - state.profile.pots.length} 格` : ''}
+          </span>
+        }
       >
         <div className="garden">
           {state.profile.pots.map((pot) => {
-            const st = stageOf(pot.pts)
-            const next = st < 4 ? BLOOM_PTS - pot.pts : 0
-            const pct = Math.min(100, (pot.pts / BLOOM_PTS) * 100)
+            const st = pot.kind ? stageOf(pot.pts) : -1
+            const bloomed = st === 4
+            const next = st >= 0 && st < 4 ? BLOOM_PTS - pot.pts : 0
+            const pct = pot.kind ? Math.min(100, (pot.pts / BLOOM_PTS) * 100) : 0
             return (
               <div key={pot.id} className="pot card" id={`pot-${pot.id}`}>
                 <div className="pot-visual">
-                  <PixelSprite name={st < 4 ? `p${st}` : `bloom_${pot.id}`} scale={6} className="plant-sprite" />
+                  <PixelSprite name={st < 0 ? 'pot_empty' : st < 4 ? `p${st}` : `bloom_${pot.kind}`} scale={6} className="plant-sprite" />
                   <span className="drop-anim"><PixelSprite name="drop" scale={3} /></span>
                 </div>
-                <div className="pot-name">{POT_NAMES[pot.id]}</div>
-                <Chip className={`pot-stage ${st === 4 ? 'bloom' : ''}`}>{STAGE_NAMES[st]}</Chip>
-                <Bar pct={pct} color={st === 4 ? 'gold' : 'green'} className="pot-bar" />
-                <span className="pot-next">{st === 4 ? '盛开啦！再来一株？' : `再浇 ${next} 次开花`}</span>
+                {!pot.kind ? (
+                  <div className="pot-plant-pick">
+                    <span className="pot-next">空花盆</span>
+                    <select defaultValue="" onChange={(e) => e.target.value && plant(pot, e.target.value)}>
+                      <option value="">种点什么…</option>
+                      {PLANT_META.filter((p) => (state.profile.unlockedKinds || []).includes(p.id)).map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div className="pot-name">{plantName(pot.kind)}</div>
+                    <Chip className={`pot-stage ${bloomed ? 'bloom' : ''}`}>{STAGE_NAMES[st]}</Chip>
+                    <Bar pct={pct} color={bloomed ? 'gold' : 'green'} className="pot-bar" />
+                    <span className="pot-next">
+                      {bloomed ? '盛开啦！' : `再浇 ${next} 次开花`}
+                    </span>
+                    {bloomed && <Btn size="sm" color="gold" onClick={() => harvest(pot)}>🌼 采集种子 +6🪙</Btn>}
+                  </>
+                )}
               </div>
             )
           })}
         </div>
+        {(state.profile.decor || []).length > 0 && (
+          <div className="garden-decor">
+            {state.profile.decor.map((d) => <PixelSprite key={d} name={`decor_${d}`} scale={4} />)}
+          </div>
+        )}
         <div className="garden-foot">
-          <span className="muted">{freeWater ? '今天还有一次免费浇水机会 💧' : `今天已免费浇过，再浇一次花 ${WATER_COST} 金币`}</span>
-          <Btn color="blue" onClick={water}>🪣 浇水壶</Btn>
+          <span className="muted">
+            {freeWater ? '今天还有一次免费浇水机会 💧' : `今天已免费浇过，再浇一次花 ${WATER_COST} 金币`}
+            {emptyPots > 0 ? ` · 有 ${emptyPots} 个空盆等着种子` : ''}
+          </span>
+          <div className="btn-row">
+            <Btn onClick={() => { setShopOpen(true); sfx('click') }}>🛒 小镇商店</Btn>
+            <Btn color="blue" onClick={water}>🪣 浇水壶</Btn>
+          </div>
         </div>
       </Panel>
+
+      <ShopModal open={shopOpen} onClose={() => setShopOpen(false)} />
     </div>
   )
 }

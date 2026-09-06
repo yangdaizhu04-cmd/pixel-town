@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { useApp } from '../lib/store.jsx'
-import { Modal, Btn, Field, Chip } from './ui.jsx'
-import { setMuted, sfx } from '../lib/gamify.js'
+import { useApp, hydrate } from '../lib/store.jsx'
+import { Modal, Btn, Field, Chip, confirmBox } from './ui.jsx'
+import { setMuted, sfx, emit } from '../lib/gamify.js'
+import { webdavUpload, webdavDownload, backupFilename } from '../lib/webdav.js'
+import { dayKey, daysBetween } from '../lib/dates.js'
 
 const PRESETS = [
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -11,12 +13,18 @@ const PRESETS = [
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
 ]
 
+const summarizeSave = (s) => {
+  const p = s.profile || {}
+  return `Lv.${p.level || '?'} · 金币 ${p.coins ?? '?'} · 连续 ${p.streak ?? '?'} 天 · 待办 ${(s.todos || []).length} 条`
+}
+
 export default function SettingsModal({ open, onClose }) {
   const { state, dispatch } = useApp()
   const [form, setForm] = useState(state.settings)
   const [name, setName] = useState(state.profile.name)
   const [height, setHeight] = useState(state.profile.height)
   const [danger, setDanger] = useState(false)
+  const [davBusy, setDavBusy] = useState('')
 
   useEffect(() => {
     if (open) {
@@ -24,6 +32,7 @@ export default function SettingsModal({ open, onClose }) {
       setName(state.profile.name)
       setHeight(state.profile.height)
       setDanger(false)
+      setDavBusy('')
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -40,32 +49,89 @@ export default function SettingsModal({ open, onClose }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `pixel-town-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `pixel-town-backup-${dayKey()}.json`
     a.click()
     URL.revokeObjectURL(url)
+    dispatch({ type: 'EXPORT_MARK' })
+    emit('toast', { icon: '💾', text: '备份已导出，记得存进网盘或手机里' })
   }
 
+  // 导入前先预览存档摘要，确认后才覆盖（旧版是直接覆盖，误选文件会丢数据）
   const importData = (file) => {
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
-        const data = JSON.parse(reader.result)
-        if (!data || !data.profile) throw new Error('bad')
+        const data = hydrate(JSON.parse(reader.result))
+        const ok = await confirmBox({
+          title: '导入这份存档？',
+          message: `这是一位 ${summarizeSave(data)} 的居民存档。\n导入会覆盖当前小镇的全部记录，建议先「导出备份」留底。`,
+          danger: true,
+          okText: '覆盖导入',
+        })
+        if (!ok) return
         dispatch({ type: 'IMPORT', state: data })
         sfx('levelup')
+        emit('toast', { icon: '📥', text: '存档导入成功，欢迎回家～' })
         onClose()
       } catch {
-        alert('这个文件不像小镇存档哦，检查一下是不是备份 JSON？')
+        emit('toast', { icon: '📎', text: '这个文件不像小镇存档哦，检查一下是不是备份 JSON？' })
+        sfx('oops')
       }
     }
     reader.readAsText(file)
   }
 
-  const reset = () => {
+  const davUpload = async () => {
+    setDavBusy('up')
+    try {
+      await webdavUpload({ url: form.webdavUrl, user: form.webdavUser, pass: form.webdavPass, content: JSON.stringify(state), filename: backupFilename() })
+      dispatch({ type: 'EXPORT_MARK' })
+      emit('toast', { icon: '☁️', text: '已备份到网盘！' })
+      sfx('levelup')
+    } catch (err) {
+      emit('toast', { icon: '☁️', text: `${err.message}（若是 CORS 拦截，说明该网盘不支持浏览器直连，请用「导出备份」）` })
+      sfx('oops')
+    }
+    setDavBusy('')
+  }
+
+  const davDownload = async () => {
+    setDavBusy('down')
+    try {
+      const text = await webdavDownload({ url: form.webdavUrl, user: form.webdavUser, pass: form.webdavPass, filename: backupFilename() })
+      const data = hydrate(JSON.parse(text))
+      const ok = await confirmBox({
+        title: '从网盘恢复？',
+        message: `网盘上是 Lv.${data.profile.level}、连续 ${data.profile.streak} 天的存档。恢复会覆盖当前小镇记录，确定吗？`,
+        danger: true,
+        okText: '恢复',
+      })
+      if (!ok) { setDavBusy(''); return }
+      dispatch({ type: 'IMPORT', state: data })
+      sfx('levelup')
+      emit('toast', { icon: '☁️', text: '已从网盘恢复！' })
+      onClose()
+    } catch (err) {
+      emit('toast', { icon: '☁️', text: err.message })
+      sfx('oops')
+    }
+    setDavBusy('')
+  }
+
+  const reset = async () => {
     if (!danger) { setDanger(true); return }
+    const ok = await confirmBox({ title: '重置小镇', message: '所有记录都会清空并恢复演示数据，确定要重来吗？', danger: true, okText: '清空重来' })
+    if (!ok) { setDanger(false); return }
     dispatch({ type: 'RESET' })
     onClose()
   }
+
+  const lastExport = state.profile.lastExportDay
+  const exportHint = !lastExport
+    ? '还没有导出过备份。localStorage 一旦被浏览器清理就无法找回，建议每周导出一次～'
+    : daysBetween(lastExport, dayKey()) >= 7
+      ? `上次备份是 ${daysBetween(lastExport, dayKey())} 天前，花 10 秒导出一份吧？`
+      : `上次备份：${lastExport}`
 
   return (
     <Modal open={open} onClose={onClose} title="小镇设置" wide>
@@ -79,12 +145,15 @@ export default function SettingsModal({ open, onClose }) {
             <Field label="身高 cm（算 BMI 用）">
               <input type="number" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="170" />
             </Field>
+            <Field label="常驻城市（首页显示真实天气）">
+              <input value={form.city || ''} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="比如：杭州；留空则用小镇预言天气" />
+            </Field>
           </div>
         </section>
 
         <section>
           <h4>🐣 智能体「阿咕」</h4>
-          <p className="settings-hint">填入任意 OpenAI 兼容接口的 Key，阿咕就会变成大模型大脑；留空则使用离线小精灵（能查数据、记待办）。Key 只保存在你自己的浏览器里。</p>
+          <p className="settings-hint">填入任意 OpenAI 兼容接口的 Key，阿咕就会变成大模型大脑（还流式打字、能帮你记待办和记账）；留空则使用离线小精灵。Key 只保存在你自己的浏览器里。</p>
           <div className="preset-row">
             {PRESETS.map((p) => (
               <Btn
@@ -114,6 +183,26 @@ export default function SettingsModal({ open, onClose }) {
         </section>
 
         <section>
+          <h4>☁️ 云备份（WebDAV，可选）</h4>
+          <p className="settings-hint">填 WebDAV 地址和账号即可一键备份/恢复。坚果云地址形如 https://dav.jianguoyun.com/dav/（密码用「应用密码」）。若浏览器提示 CORS 拦截，说明该网盘不支持网页直连，改用下方手动导出即可。</p>
+          <div className="form-row">
+            <Field label="WebDAV 地址">
+              <input value={form.webdavUrl || ''} onChange={(e) => setForm({ ...form, webdavUrl: e.target.value })} placeholder="https://dav.jianguoyun.com/dav/" />
+            </Field>
+            <Field label="账号">
+              <input value={form.webdavUser || ''} onChange={(e) => setForm({ ...form, webdavUser: e.target.value })} autoComplete="off" />
+            </Field>
+            <Field label="密码 / 应用密码">
+              <input type="password" value={form.webdavPass || ''} onChange={(e) => setForm({ ...form, webdavPass: e.target.value })} autoComplete="off" />
+            </Field>
+          </div>
+          <div className="btn-row">
+            <Btn color="blue" disabled={!form.webdavUrl || !form.webdavUser || davBusy === 'up'} onClick={davUpload}>{davBusy === 'up' ? '上传中…' : '☁️ 备份到网盘'}</Btn>
+            <Btn disabled={!form.webdavUrl || !form.webdavUser || davBusy === 'down'} onClick={davDownload}>{davBusy === 'down' ? '读取中…' : '☁️ 从网盘恢复'}</Btn>
+          </div>
+        </section>
+
+        <section>
           <h4>🔔 音效</h4>
           <label className="check-line">
             <input type="checkbox" checked={form.sound} onChange={(e) => setForm({ ...form, sound: e.target.checked })} />
@@ -123,6 +212,7 @@ export default function SettingsModal({ open, onClose }) {
 
         <section>
           <h4>💾 数据（保存在浏览器本地）</h4>
+          <p className="settings-hint">{exportHint}</p>
           <div className="btn-row">
             <Btn onClick={exportData}>导出备份</Btn>
             <label className="btn import-label">
@@ -131,7 +221,6 @@ export default function SettingsModal({ open, onClose }) {
             </label>
             <Btn color="red" onClick={reset}>{danger ? '再点一次确认清空！' : '重置小镇'}</Btn>
           </div>
-          <p className="settings-hint">重置会清空所有记录并恢复演示数据，建议先导出备份。</p>
         </section>
       </div>
       <div className="modal-foot">

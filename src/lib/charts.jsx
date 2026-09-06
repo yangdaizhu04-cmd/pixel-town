@@ -56,39 +56,52 @@ export function Bars({ data, rows = 10, scale = 7, color = 'green', fmt }) {
 }
 
 // 像素折线图：data = [number, ...]
-export function Line({ data, rows = 14, scale = 8, color = 'orange' }) {
+// v2 可选：data2（第二条浅色曲线，如 7 日均值）、goal（水平虚线，如目标体重）。
+// min/max 由三条线共同决定，否则目标线会把主曲线压扁。
+export function Line({ data, data2, goal, rows = 14, scale = 8, color = 'orange', color2 = 'blue' }) {
   const ref = useRef(null)
   const n = data.length
-  const sig = data.join(',')
+  const sig = [data.join(','), (data2 || []).join(','), goal ?? ''].join('|')
 
   useEffect(() => {
     const c = ref.current
     if (!c || n < 2) return
-    const min = Math.min(...data)
-    const max = Math.max(...data)
+    const all = [...data, ...(data2 || []), ...(goal != null ? [goal] : [])]
+    const min = Math.min(...all)
+    const max = Math.max(...all)
     const span = Math.max(0.001, max - min)
     c.width = n
     c.height = rows
     const ctx = c.getContext('2d')
     ctx.clearRect(0, 0, n, rows)
-    const col = chartColor(color)
     const yOf = (v) => Math.max(0, Math.min(rows - 1, Math.round(rows - 1.5 - ((v - min) / span) * (rows - 3))))
-    const pts = data.map((v, i) => [i, yOf(v)])
-    for (let i = 0; i < n - 1; i++) {
-      const [x0, y0] = pts[i]
-      const [x1, y1] = pts[i + 1]
-      const steps = Math.max(1, Math.abs(y1 - y0))
-      for (let t = 0; t <= steps; t++) {
-        const x = x0
-        const y = Math.round(y0 + ((y1 - y0) * t) / steps)
+    const drawSeries = (series, col) => {
+      if (!series || series.length < 2) return
+      const pts = series.map((v, i) => [i, yOf(v)])
+      for (let i = 0; i < series.length - 1; i++) {
+        const [x0, y0] = pts[i]
+        const [_x1, y1] = pts[i + 1]
+        const steps = Math.max(1, Math.abs(y1 - y0))
+        for (let t = 0; t <= steps; t++) {
+          const x = x0
+          const y = Math.round(y0 + ((y1 - y0) * t) / steps)
+          ctx.fillStyle = col
+          ctx.fillRect(x, y, 1, 1)
+        }
+      }
+      pts.forEach(([x, y]) => {
         ctx.fillStyle = col
         ctx.fillRect(x, y, 1, 1)
-      }
+      })
     }
-    pts.forEach(([x, y]) => {
-      ctx.fillStyle = col
-      ctx.fillRect(x, y, 1, 1)
-    })
+    // 目标线：隔两格一点的虚线
+    if (goal != null) {
+      const y = yOf(goal)
+      ctx.fillStyle = chartColor('greenD')
+      for (let x = 0; x < n; x += 3) ctx.fillRect(x, y, 2, 1)
+    }
+    if (data2 && data2.length >= 2) drawSeries(data2, chartColor(color2))
+    drawSeries(data, chartColor(color))
     gsap.killTweensOf(c)
     gsap.fromTo(c, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.5, overwrite: true })
   }, [sig]) // eslint-disable-line react-hooks/exhaustive-deps

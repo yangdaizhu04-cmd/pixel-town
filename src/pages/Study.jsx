@@ -1,9 +1,64 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useApp, studyDone } from '../lib/store.jsx'
-import { Panel, Btn, Bar, Empty, Chip, Field } from '../components/ui.jsx'
+import { Panel, Btn, Bar, Empty, Chip, Field, confirmBox } from '../components/ui.jsx'
 import { Bars } from '../lib/charts.jsx'
-import { reward, sfx } from '../lib/gamify.js'
+import { PixelSprite } from '../lib/sprites.jsx'
+import { reward, sfx, emit } from '../lib/gamify.js'
+import { pomoSubscribe, pomoStart, pomoPause, pomoResume, pomoReset, pomoStop } from '../lib/pomo.js'
 import { dayKey, lastNDays, fmtShort, daysBetween, WEEKDAYS } from '../lib/dates.js'
+
+const POMO_MINS = [15, 25, 45, 60]
+const fmtClock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
+
+function Pomodoro() {
+  const { state } = useApp()
+  const [min, setMin] = useState(25)
+  const [planId, setPlanId] = useState('')
+  const [pomo, setPomo] = useState(null)
+
+  useEffect(() => pomoSubscribe(setPomo), [])
+
+  const running = pomo?.running
+  const left = pomo?.left ?? min * 60
+  const started = pomo && (pomo.left !== pomo.total || running)
+
+  return (
+    <Panel
+      title="像素番茄钟" icon="🍅"
+      extra={state.study.length > 0 && (
+        <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
+          <option value="">自由专注（不挂计划）</option>
+          {state.study.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+        </select>
+      )}
+    >
+      <div className="pomo">
+        <div className={`pomo-clock card ${running ? 'on' : ''}`}>
+          {running && <PixelSprite name="bird" scale={3} className="bob pomo-bird" />}
+          <span className="pomo-time">{fmtClock(left)}</span>
+          <span className="pomo-hint">
+            {running ? (planId ? '专注中…完成后自动记进计划' : '专注中…阿咕陪着你') : started ? '暂停中，歇会也行' : '选好时长，开始一段专注'}
+          </span>
+        </div>
+        <div className="pomo-ctrl">
+          <div className="seg">
+            {POMO_MINS.map((m) => (
+              <button key={m} className={min === m ? 'on' : ''} disabled={running} onClick={() => { setMin(m); pomoReset(m, planId); sfx('click') }}>{m} 分</button>
+            ))}
+          </div>
+          <div className="btn-row">
+            {!running
+              ? <Btn color="green" onClick={() => { if (started) pomoResume(); else { pomoStart(min, planId); emit('toast', { icon: '🍅', text: '番茄钟出发！这段时间属于你' }) } }}>{started ? '继续 ▶' : '开始专注 ▶'}</Btn>
+              : <Btn color="gold" onClick={() => pomoPause()}>暂停 ⏸</Btn>}
+            <Btn onClick={() => pomoReset(min, planId)}>重置 ↻</Btn>
+            {started && <Btn color="red" onClick={() => pomoStop()}>放弃</Btn>}
+          </div>
+          <p className="muted">中途切去别的页面它也会继续走；完成时自动记时长、发 XP，阿咕会喊你回来。</p>
+        </div>
+      </div>
+    </Panel>
+  )
+}
 
 export default function Study() {
   const { state, dispatch } = useApp()
@@ -42,6 +97,8 @@ export default function Study() {
 
   return (
     <>
+      <Pomodoro />
+
       <Panel title="本周学习时长" icon="⏳" extra={<span className="xp-pill">本周共 {week.reduce((m, x) => m + x.value, 0)} 分钟</span>}>
         {state.study.length === 0 ? <Empty icon="📚">先立一个小目标吧！</Empty> : <Bars data={week} rows={8} scale={34} fmt={(v) => `${v}min`} />}
       </Panel>
@@ -64,7 +121,7 @@ export default function Study() {
                       {overdue ? `已过期 ${-left} 天` : `剩 ${left} 天`}
                     </Chip>
                   )}
-                  <button className="del" title="删除计划" onClick={() => { if (confirm(`删除计划「${p.title}」？学习记录会一起删除哦`)) { dispatch({ type: 'STUDY_DEL', id: p.id }); sfx('oops') } }}>×</button>
+                  <button className="del" title="删除计划" onClick={async () => { if (await confirmBox({ title: '删除计划', message: `删除计划「${p.title}」？学习记录会一起删除哦`, danger: true, okText: '删除' })) { dispatch({ type: 'STUDY_DEL', id: p.id }); sfx('oops') } }}>×</button>
                 </header>
                 <Bar pct={pct} color={pct >= 100 ? 'gold' : 'green'} />
                 <div className="plan-meta">

@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useApp, bmiOf } from './lib/store.jsx'
+import { useApp } from './lib/store.jsx'
 import { gsap, useGSAP, D } from './lib/anim.js'
-import { emitConfetti, sfx, setMuted, xpNeeded } from './lib/gamify.js'
+import { sfx, setMuted, xpNeeded, emit, on, reward } from './lib/gamify.js'
 import { PixelSprite } from './lib/sprites.jsx'
-import { Chip, Btn, Bar } from './components/ui.jsx'
+import { Chip, Btn, Bar, ConfirmHost } from './components/ui.jsx'
 import { ToastHost, ConfettiHost, LevelUpModal } from './components/effects.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
+import { pomoSubscribe } from './lib/pomo.js'
+import { ACHIEVEMENTS } from './lib/achievements.js'
+import { PLANT_META } from './lib/shop.js'
+import { dayKey, pickByDay, daysBetween } from './lib/dates.js'
 import Dashboard from './pages/Dashboard.jsx'
 import Todos from './pages/Todos.jsx'
 import Ledger from './pages/Ledger.jsx'
@@ -15,8 +19,8 @@ import Study from './pages/Study.jsx'
 import English from './pages/English.jsx'
 import Weight from './pages/Weight.jsx'
 import Review from './pages/Review.jsx'
-import AgentChat from './components/AgentChat.jsx'
-import { pickByDay } from './lib/dates.js'
+import Museum from './pages/Museum.jsx'
+import AgentChat, { BirdAvatar } from './components/AgentChat.jsx'
 
 const PAGES = [
   { id: 'home', icon: '🏠', label: '首页总览', comp: Dashboard },
@@ -28,21 +32,39 @@ const PAGES = [
   { id: 'english', icon: '🔤', label: '英语练习', comp: English },
   { id: 'weight', icon: '⚖️', label: '体重记录', comp: Weight },
   { id: 'review', icon: '🌙', label: '每日复盘', comp: Review },
+  { id: 'museum', icon: '🏛️', label: '小镇年鉴', comp: Museum },
   { id: 'agent', icon: '🐣', label: '小镇精灵', comp: AgentChat },
 ]
+const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-']
 
 const TIPS = [
   '完成任务会自动给花园浇水，每天第一次手动浇水免费。',
   '今日 XP 达到 25 / 50 / 80 / 120 时，记得开冒险礼箱！',
   '写一篇复盘 +15 XP，还能点亮心情月历。',
-  '答错的单词会自动住进生词本，过两天再翻翻它。',
-  '补打卡没有奖励——诚实比连击更珍贵。',
-  '月底记得去账本看看「钱都去哪了」。',
+  '答错的单词会自动住进生词本，按遗忘曲线催你复习。',
+  '盛开的植物可以「采集种子」换金币，再去商店买新花盆！',
+  '番茄钟挂在「学习计划」页，切页也会继续走。',
+  '数字键 1-9、0、- 可以快速切页。',
+  '月底记得去账本看看「钱都去哪了」，还能设预算。',
   '把明天的第一件事写小一点，小到不可能失败。',
 ]
 
+// 番茄钟迷你指示器：运行中切到别的页面时也能看到进度
+function PomoBadge({ onGo }) {
+  const [pomo, setPomo] = useState(null)
+  useEffect(() => pomoSubscribe(setPomo), [])
+  if (!pomo || (!pomo.running && pomo.left === pomo.total)) return null
+  const mm = String(Math.floor(pomo.left / 60)).padStart(2, '0')
+  const ss = String(pomo.left % 60).padStart(2, '0')
+  return (
+    <button className={`pomo-badge ${pomo.running ? 'run' : ''}`} onClick={onGo} title="番茄钟进行中，点回学习页">
+      🍅 {mm}:{ss}
+    </button>
+  )
+}
+
 export default function App() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const [page, setPage] = useState('home')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
@@ -52,6 +74,16 @@ export default function App() {
   // 音效开关
   useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
 
+  // 番茄钟完成：自动记时长（挂了计划就进计划）、发奖励、响号角
+  useEffect(() => on('pomo-done', ({ detail }) => {
+    const { min, planId } = detail || {}
+    dispatch({ type: 'POMO_DONE', min, planId })
+    sfx('alarm')
+    const xp = Math.min(30, Math.max(5, Math.round((min / 30) * 10)))
+    const coins = min >= 30 ? 3 : 1
+    reward(dispatch, { xp, coins, msg: `专注 ${min} 分钟`, icon: '🍅', confetti: true })
+  }), [])
+
   // 升级检测
   useEffect(() => {
     if (state.profile.level > levelRef.current) {
@@ -60,6 +92,45 @@ export default function App() {
     }
     levelRef.current = state.profile.level
   }, [state.profile.level])
+
+  // 成就检测：每次状态变化跑一遍纯函数判定，解锁的发金币 + 喜报
+  useEffect(() => {
+    for (const a of ACHIEVEMENTS) {
+      if (!state.profile.achievements?.[a.id] && a.check(state, PLANT_META.length)) {
+        dispatch({ type: 'ACH_UNLOCK', id: a.id, coins: a.coins })
+        sfx('coin')
+        emit('toast', { icon: '🏆', text: `解锁成就「${a.name}」！+${a.coins} 金币` })
+      }
+    }
+  }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 备份提醒：从没导出过 / 超过 7 天没导出，进首页轻声提一句
+  useEffect(() => {
+    const last = state.profile.lastExportDay
+    if (!last || daysBetween(last, dayKey()) >= 7) {
+      const timer = setTimeout(() => {
+        emit('toast', { icon: '💾', text: '好久没备份小镇啦，设置里可以导出或云备份' })
+      }, 2500)
+      return () => clearTimeout(timer)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 键盘快捷键：数字键切页（输入框/弹窗打开时不劫持）
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      if (document.querySelector('.overlay')) return
+      const i = HOTKEYS.indexOf(e.key)
+      if (i >= 0 && PAGES[i]) {
+        sfx('click')
+        setPage(PAGES[i].id)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // 金币跳动
   useEffect(() => {
@@ -82,9 +153,12 @@ export default function App() {
     })
   }, [])
 
-  // 页面切换动画
+  // 页面切换动画（fromTo + overwrite：即便上一条补间被 HMR/热更新打断，
+  // 下一次切换也会从显式起点重置，元素不会被钉在 visibility:hidden）
   useGSAP(() => {
-    gsap.from('.card', { y: 24, autoAlpha: 0, duration: D(0.42), stagger: 0.055, ease: 'power2.out', clearProps: 'all' })
+    gsap.fromTo('.card',
+      { y: 24, autoAlpha: 0 },
+      { y: 0, autoAlpha: 1, duration: D(0.42), stagger: 0.055, ease: 'power2.out', clearProps: 'all', overwrite: true })
   }, { dependencies: [page], scope: mainRef, revertOnUpdate: true })
 
   // 切页回顶部
@@ -113,7 +187,7 @@ export default function App() {
         </div>
         <div className="topbar-right">
           <Chip className="lv" title={`距下一级还差 ${need - profile.xp} XP`}>Lv.{profile.level} <em className="lv-xp">{profile.xp}/{need} XP</em></Chip>
-          <Chip className="wallet" title="金币：完成任务赚，浇水花">🪙 {profile.coins}</Chip>
+          <Chip className="wallet" title="金币：完成任务赚，商店和浇水花">🪙 {profile.coins}</Chip>
           <Btn size="sm" title="设置" onClick={() => setSettingsOpen(true)}>⚙️</Btn>
         </div>
       </header>
@@ -149,12 +223,14 @@ export default function App() {
 
       {page !== 'agent' && (
         <button className="fab" title="和阿咕聊聊" onClick={() => { sfx('pop'); setPage('agent') }}>
-          <PixelSprite name="bird" scale={3} />
+          <BirdAvatar scale={3} />
         </button>
       )}
+      <PomoBadge onGo={() => { sfx('click'); setPage('study') }} />
 
       <ToastHost />
       <ConfettiHost />
+      <ConfirmHost />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <LevelUpModal level={levelUp} onClose={() => setLevelUp(null)} />
     </div>
