@@ -313,7 +313,40 @@ for (const [name, top] of Object.entries(PLANT_TOPS)) {
 // 否则 `bloom_${kind}` 拼出 bloom_sunflower 会找不到精灵（v2 图鉴踩中的 v1 遗留坑）
 SPRITES.bloom_sunflower = SPRITES.bloom_sun
 
-// ---- 商店装饰 / 阿咕帽子 / 奖杯 ----
+// ---- 阿咕 + 帽子：把帽子直接画进鸟的字符画（CSS 绝对定位叠加会错位、出画，实测很丑） ----
+// 帽子占顶部 3 行，与鸟身共用一张 canvas，天然对齐。
+const BIRD_ROWS = SPRITES.bird.rows
+const BIRD_PAL = SPRITES.bird.pal
+function birdWithHat(hatRows) {
+  const w = BIRD_ROWS[0].length
+  const top = hatRows.map((r) => (r + '.'.repeat(w)).slice(0, w))
+  return {
+    pal: { ...BIRD_PAL, G: C.greenD, F: C.red, Y: C.gold },
+    rows: [...top, ...BIRD_ROWS],
+  }
+}
+SPRITES.bird_leaf = birdWithHat([
+  '....G....G....',
+  '....GG..GG....',
+  '.....GGGG.....',
+])
+SPRITES.bird_berry = birdWithHat([
+  '.....FFFF.....',
+  '....FFFFFF....',
+  '....FFFFFF....',
+])
+SPRITES.bird_crown = birdWithHat([
+  '...Y..Y..Y....',
+  '...YYYYYYYY...',
+  '...YYYYYYYY...',
+])
+// 根据商店帽子 id 返回对应的合成精灵名（没戴/未知 → 光鸟）
+export const birdNameForHat = (hat) => {
+  const kind = (hat || '').replace(/^hat_/, '')
+  return SPRITES[`bird_${kind}`] ? `bird_${kind}` : 'bird'
+}
+
+// ---- 商店装饰 / 奖杯 ----
 Object.assign(SPRITES, {
   decor_fence: {
     pal: V({ q: C.potD, p: C.potL }),

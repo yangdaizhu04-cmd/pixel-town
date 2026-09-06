@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useApp } from '../lib/store.jsx'
-import { PixelSprite } from '../lib/sprites.jsx'
+import { PixelSprite, birdNameForHat } from '../lib/sprites.jsx'
 import { Btn, Chip, Panel, confirmBox } from './ui.jsx'
 import { askAI, localAgent, parseActs } from '../lib/ai.js'
 import { sfx, emit } from '../lib/gamify.js'
@@ -16,14 +16,12 @@ const SUGGESTIONS = [
   '我有点累，鼓励我一下',
 ]
 
-// 阿咕 + 帽子（商店里买的帽子用 CSS 叠在小鸟头顶）
+// 阿咕 + 帽子：帽子直接合成在鸟的字符画里（bird_leaf / bird_berry / bird_crown）
 export function BirdAvatar({ scale = 4, className = '' }) {
   const { state } = useApp()
-  const hat = state.profile.hat
   return (
     <span className={`bird-wrap ${className}`}>
-      <PixelSprite name="bird" scale={scale} />
-      {hat && <PixelSprite name={hat} scale={scale} className="bird-hat" />}
+      <PixelSprite name={birdNameForHat(state.profile.hat)} scale={scale} />
     </span>
   )
 }

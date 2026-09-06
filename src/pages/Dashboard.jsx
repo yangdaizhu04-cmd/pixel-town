@@ -10,7 +10,7 @@ import { MILESTONES, XP_GOAL, WATER_COST, emit, sfx, emitConfetti } from '../lib
 import { MAX_POTS, PLANT_META, plantName } from '../lib/shop.js'
 import { useGSAP, gsap, D } from '../lib/anim.js'
 import { greeting, fmtLong, pickByDay, dayKey } from '../lib/dates.js'
-import { fetchWeather } from '../lib/weather.js'
+import { fetchWeatherByCity, fetchWeatherByGeo } from '../lib/weather.js'
 
 const WEATHERS = [
   { name: '大晴天', sprite: 'sun', copy: '先完成一件小事，快乐会慢慢长出来。' },
@@ -44,27 +44,28 @@ export default function Dashboard() {
   const { state, dispatch } = useApp()
   const rootRef = useRef(null)
   const [shopOpen, setShopOpen] = useState(false)
-  const [wxLoaded, setWxLoaded] = useState({ city: '', data: null })
+  const [wxLoaded, setWxLoaded] = useState({ key: '', data: null })
   const open = todosOpen(state)
   const doneToday = todosDoneToday(state)
   const habitsDone = state.habits.filter((h) => h.days[dayKey()]).length
   const w = lastWeight(state)
-  // 真实天气（设置里填了城市才启用；失败自动回退到小镇预言天气）。
-  // 渲染期按「城市是否已加载完成」派生，不在 effect 里同步 setState。
-  // 注意：weather 的声明必须在上面的 wx 之前——JS 的 const 有暂时性死区，
-  // 顺序反了首屏会直接 ReferenceError 白屏（真实踩坑，见踩坑指南）。
-  const weather = state.settings.city && wxLoaded.city === state.settings.city ? wxLoaded.data : null
+  // 真实天气：跟随定位（weatherMode='geo'）或指定城市（'city'）；都未启用/失败时回退小镇预言。
+  // 渲染期按「来源 key 是否已加载完成」派生，不在 effect 里同步 setState。
+  // 注意：weather 的声明必须在上面的 wx 之前——const 有暂时性死区，顺序反了首屏白屏（踩坑 16）。
+  const wxMode = state.settings.weatherMode || ''
+  const wxKey = wxMode === 'geo' ? 'geo' : wxMode === 'city' ? `city:${state.settings.city}` : ''
+  const weather = wxKey && wxLoaded.key === wxKey ? wxLoaded.data : null
   const wx = weather || pickByDay(WEATHERS, 'wx')
   const claimed = state.claimed[dayKey()] || []
   const freeWater = state.profile.waterLastDay !== dayKey()
 
   useEffect(() => {
-    const city = state.settings.city
-    if (!city) return
+    if (!wxKey) return
     let alive = true
-    fetchWeather(city).then((r) => { if (alive) setWxLoaded({ city, data: r }) })
+    const job = wxMode === 'geo' ? fetchWeatherByGeo() : fetchWeatherByCity(state.settings.city)
+    job.then((r) => { if (alive) setWxLoaded({ key: wxKey, data: r }) })
     return () => { alive = false }
-  }, [state.settings.city])
+  }, [wxKey, wxMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 植物升级检测（含自动浇水带来的成长）
   const prevStages = useRef(null)
@@ -166,7 +167,9 @@ export default function Dashboard() {
           <div>
             <h3>
               今天的小镇天气 · {wx.name}
-              {weather ? <Chip color="blue" className="weather-tag">{weather.temp}°C · {weather.city}</Chip> : <Chip className="weather-tag">小镇预言 · 填城市看真天气</Chip>}
+              {weather
+                ? <Chip color="blue" className="weather-tag">{wxMode === 'geo' ? '📍 ' : ''}{weather.temp}°C · {weather.city}</Chip>
+                : <Chip className="weather-tag">小镇预言 · 设置里可开启真实天气</Chip>}
             </h3>
             <p>{wx.copy}</p>
           </div>

@@ -567,9 +567,8 @@ textarea { resize: vertical; width: 100%; }
 .ledger-filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .ledger-filters select { font-size: 13px; padding: 5px 8px; }
 
-/* ---------- v2：阿咕帽子 ---------- */
+/* ---------- v2：阿咕（帽子已合成进字符画，无需叠加样式） ---------- */
 .bird-wrap { position: relative; display: inline-flex; }
-.bird-hat { position: absolute; top: -26%; left: 50%; transform: translateX(-50%); pointer-events: none; }
 
 /* ---------- v2：番茄钟 ---------- */
 .pomo { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }

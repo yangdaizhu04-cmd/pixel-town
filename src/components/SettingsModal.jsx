@@ -145,10 +145,22 @@ export default function SettingsModal({ open, onClose }) {
             <Field label="身高 cm（算 BMI 用）">
               <input type="number" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="170" />
             </Field>
-            <Field label="常驻城市（首页显示真实天气）">
-              <input value={form.city || ''} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="比如：杭州；留空则用小镇预言天气" />
+            <Field label="天气来源">
+              <select value={form.weatherMode || ''} onChange={(e) => setForm({ ...form, weatherMode: e.target.value })}>
+                <option value="">小镇预言（不查真实天气）</option>
+                <option value="geo">📍 跟随我的定位</option>
+                <option value="city">🏙️ 指定城市</option>
+              </select>
             </Field>
+            {form.weatherMode === 'city' && (
+              <Field label="城市名">
+                <input value={form.city || ''} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="比如：杭州" />
+              </Field>
+            )}
           </div>
+          {(form.weatherMode || '') === 'geo' && (
+            <p className="settings-hint">📍 浏览器会请求一次定位权限（约 30 分钟复用一次，不会反复打扰）；拒绝或定位失败时自动回退到小镇预言天气。</p>
+          )}
         </section>
 
         <section>

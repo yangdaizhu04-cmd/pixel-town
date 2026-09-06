@@ -1,8 +1,12 @@
 // ---------- 真实天气：open-meteo（免费、无需 Key、支持 CORS） ----------
-// 流程：城市名 → geocoding 拿经纬度 → forecast 拿 WMO weathercode；缓存 2 小时。
-// 失败/未配置城市时返回 null，由调用方回退到本地伪随机天气。
+// 两种来源：
+//   1) 指定城市：城市名 → geocoding 拿经纬度 → forecast 拿 WMO weathercode
+//   2) 跟随定位：浏览器定位拿经纬度 → forecast；城市名用 BigDataCloud 免费逆地理编码
+// 缓存 2 小时，key 区分来源；失败一律返回 null，由调用方回退到本地伪随机天气。
 const CACHE_KEY = 'pixel-town-weather-v1'
+const GEO_KEY = 'pixel-town-geo-v1' // 最近一次定位坐标（30 分钟内复用，避免反复弹权限）
 const MAX_AGE = 2 * 3600 * 1000
+const GEO_TTL = 30 * 60 * 1000
 
 // WMO weathercode → 小镇天气精灵（0 晴 / 2-3 多云 / 其余雨雪都归到小雨）
 function codeToSprite(code) {
@@ -17,14 +21,88 @@ const COPY = {
   drop: '外面真的在下雨，适合待在屋里，泡杯茶做点小事。',
 }
 
-export async function fetchWeather(city) {
-  const c = (city || '').trim()
-  if (!c) return null
-  // 命中缓存直接回
+function readCache(key) {
   try {
     const raw = JSON.parse(localStorage.getItem(CACHE_KEY))
-    if (raw && raw.city === c && Date.now() - raw.at < MAX_AGE) return raw.data
+    if (raw && raw.key === key && Date.now() - raw.at < MAX_AGE) return raw.data
   } catch { /* ignore */ }
+  return null
+}
+function writeCache(key, data) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), key, data })) } catch { /* ignore */ }
+}
+
+async function fetchForecast(lat, lon, signal) {
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { signal })
+  const wx = await res.json()
+  return wx.current_weather || null
+}
+
+// 逆地理编码：坐标 → 城市显示名（BigDataCloud 免费客户端接口，无需 Key）
+async function reverseGeocode(lat, lon, signal) {
+  try {
+    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`, { signal })
+    const g = await res.json()
+    return g.city || g.locality || g.principalSubdivision || '你的位置'
+  } catch {
+    return '你的位置'
+  }
+}
+
+// ---------- 跟随定位 ----------
+export async function fetchWeatherByGeo() {
+  const key = 'geo'
+  const cached = readCache(key)
+  if (cached) return cached
+
+  // 30 分钟内的定位坐标直接复用，避免每次进首页都弹权限/等定位
+  let lat = null
+  let lon = null
+  try {
+    const g = JSON.parse(localStorage.getItem(GEO_KEY))
+    if (g && Date.now() - g.at < GEO_TTL) { lat = g.lat; lon = g.lon }
+  } catch { /* ignore */ }
+
+  if (lat == null) {
+    const pos = await new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error('NO_GEO')); return }
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000, maximumAge: 10 * 60 * 1000 })
+    })
+    lat = pos.coords.latitude
+    lon = pos.coords.longitude
+    try { localStorage.setItem(GEO_KEY, JSON.stringify({ at: Date.now(), lat, lon })) } catch { /* ignore */ }
+  }
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 9000)
+  try {
+    const cur = await fetchForecast(lat.toFixed(3), lon.toFixed(3), ctrl.signal)
+    if (!cur) return null
+    const sprite = codeToSprite(cur.weathercode)
+    const data = {
+      sprite,
+      name: NAME[sprite],
+      copy: COPY[sprite],
+      temp: Math.round(cur.temperature),
+      city: await reverseGeocode(lat, lon, ctrl.signal),
+      live: true,
+    }
+    writeCache(key, data)
+    return data
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ---------- 指定城市 ----------
+export async function fetchWeatherByCity(city) {
+  const c = (city || '').trim()
+  if (!c) return null
+  const key = `city:${c}`
+  const cached = readCache(key)
+  if (cached) return cached
 
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 8000)
@@ -33,9 +111,7 @@ export async function fetchWeather(city) {
     const geo = await geoRes.json()
     const loc = geo.results && geo.results[0]
     if (!loc) return null
-    const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current_weather=true`, { signal: ctrl.signal })
-    const wx = await wxRes.json()
-    const cur = wx.current_weather
+    const cur = await fetchForecast(loc.latitude, loc.longitude, ctrl.signal)
     if (!cur) return null
     const sprite = codeToSprite(cur.weathercode)
     const data = {
@@ -46,7 +122,7 @@ export async function fetchWeather(city) {
       city: loc.name,
       live: true,
     }
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), city: c, data })) } catch { /* ignore */ }
+    writeCache(key, data)
     return data
   } catch {
     return null
