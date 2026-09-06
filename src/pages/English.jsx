@@ -4,39 +4,9 @@ import { Panel, Btn, Bar, Chip } from '../components/ui.jsx'
 import { REWARDS, reward, sfx, emit } from '../lib/gamify.js'
 import { gsap, D, useGSAP } from '../lib/anim.js'
 import { speak } from '../lib/tts.js'
+import { WORDS } from '../lib/words.js'
 import { useRef } from 'react'
 import { dayKey, daysBetween } from '../lib/dates.js'
-
-const WORDS = [
-  { w: 'persist', pos: 'v.', zh: '坚持；持续', ex: 'She persisted until the little garden bloomed.' },
-  { w: 'cozy', pos: 'adj.', zh: '温暖舒适的', ex: 'The pixel cabin feels cozy on rainy days.' },
-  { w: 'spare', pos: 'adj.', zh: '空闲的；备用的', ex: 'What do you do in your spare time?' },
-  { w: 'achieve', pos: 'v.', zh: '实现；达到', ex: 'Small steps help you achieve big goals.' },
-  { w: 'gentle', pos: 'adj.', zh: '温和的；轻柔的', ex: 'Be gentle with yourself today.' },
-  { w: 'progress', pos: 'n.', zh: '进步', ex: 'Every drop of water is progress.' },
-  { w: 'routine', pos: 'n.', zh: '惯例；日常', ex: 'A good routine keeps the town tidy.' },
-  { w: 'grateful', pos: 'adj.', zh: '感激的', ex: 'I am grateful for tiny joys.' },
-  { w: 'balance', pos: 'n.', zh: '平衡；余额', ex: 'Work and rest need balance.' },
-  { w: 'curious', pos: 'adj.', zh: '好奇的', ex: 'Stay curious, like a cat in town.' },
-  { w: 'harvest', pos: 'n.', zh: '收获', ex: 'Autumn is the harvest season.' },
-  { w: 'refresh', pos: 'v.', zh: '刷新；恢复活力', ex: 'A short walk will refresh you.' },
-  { w: 'gather', pos: 'v.', zh: '聚集；收集', ex: 'Villagers gather at the plaza.' },
-  { w: 'sprout', pos: 'v.', zh: '发芽', ex: 'New ideas sprout every morning.' },
-  { w: 'journey', pos: 'n.', zh: '旅程', ex: 'The journey matters more than the map.' },
-  { w: 'tidy', pos: 'adj.', zh: '整洁的', ex: 'A tidy desk makes a tidy mind.' },
-  { w: 'reward', pos: 'n.', zh: '奖励', ex: 'XP is a tiny reward for effort.' },
-  { w: 'streak', pos: 'n.', zh: '连胜；连续记录', ex: 'A 7-day streak feels wonderful.' },
-  { w: 'soothe', pos: 'v.', zh: '安抚；缓解', ex: 'Music soothes a tired heart.' },
-  { w: 'bloom', pos: 'v.', zh: '开花', ex: 'Flowers bloom after patient care.' },
-  { w: 'focus', pos: 'n.', zh: '专注', ex: 'Focus on one thing at a time.' },
-  { w: 'hobby', pos: 'n.', zh: '爱好', ex: 'A hobby is a friend for life.' },
-  { w: 'brief', pos: 'adj.', zh: '简短的', ex: 'Keep the meeting brief.' },
-  { w: 'cheer', pos: 'v.', zh: '欢呼；加油', ex: 'The crowd cheers for tiny wins.' },
-  { w: 'wander', pos: 'v.', zh: '漫步', ex: 'We wander along the pixel river.' },
-  { w: 'plenty', pos: 'n.', zh: '充足；大量', ex: 'Drink plenty of water every day.' },
-  { w: 'merry', pos: 'adj.', zh: '愉快的', ex: 'Merry little bells ring in town.' },
-  { w: 'attempt', pos: 'n.', zh: '尝试', ex: 'Every attempt counts, even a fail.' },
-]
 
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5)
 // 词单行格式：单词[,词性][,中文][,例句]（逗号/中文逗号/Tab 均可）
@@ -247,6 +217,7 @@ export default function English() {
           <textarea
             className="import-area"
             rows={6}
+            aria-label="词单内容（每行一个单词：单词,词性,中文,例句 或 单词,中文）"
             value={importText}
             placeholder={'cozy,adj.,温暖舒适的,The pixel cabin feels cozy.\ntidy,整洁的'}
             onChange={(e) => setImportText(e.target.value)}

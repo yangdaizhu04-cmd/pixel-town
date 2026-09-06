@@ -134,6 +134,7 @@ export default function AgentChat({ onOpenSettings }) {
       <div className="chat-input">
         <input
           value={input}
+          aria-label="和阿咕说点什么"
           placeholder="和阿咕说点什么…（回车发送）"
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') send() }}

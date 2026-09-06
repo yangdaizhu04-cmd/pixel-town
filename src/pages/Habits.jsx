@@ -63,7 +63,8 @@ export default function Habits() {
               <div className="habit-streak-cell">连续</div>
             </div>
             {state.habits.map((h) => {
-              const streak = habitStreak(h)
+              // 连续天数按所看那一周的周末算：翻到上周时显示的是上周末的连续，而不是今天的
+              const streak = habitStreak(h, days[days.length - 1])
               return (
                 <div key={h.id} className="habit-row">
                   <div className="habit-name-cell">
@@ -102,6 +103,7 @@ export default function Habits() {
         <div className="add-row">
           <input
             value={name}
+            aria-label="习惯名称"
             placeholder="习惯名字，比如：睡前拉伸 5 分钟"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}

@@ -89,7 +89,7 @@ export default function SettingsModal({ open, onClose }) {
     try {
       await webdavUpload({ url: form.webdavUrl, user: form.webdavUser, pass: form.webdavPass, content: JSON.stringify(sanitized()), filename: backupFilename() })
       dispatch({ type: 'EXPORT_MARK' })
-      emit('toast', { icon: '☁️', text: '已备份到网盘！' })
+      emit('toast', { icon: '☁️', text: '已备份到网盘（每日留痕，历史版本不覆盖）！' })
       sfx('levelup')
     } catch (err) {
       emit('toast', { icon: '☁️', text: `${err.message}（若是 CORS 拦截，说明该网盘不支持浏览器直连，请用「导出备份」）` })

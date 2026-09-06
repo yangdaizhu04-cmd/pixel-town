@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useApp, todosOpen, todosDoneToday } from '../lib/store.jsx'
 import { Panel, Btn, Bar, Empty, Chip, confirmBox } from '../components/ui.jsx'
 import { REWARDS, reward, sfx } from '../lib/gamify.js'
@@ -25,6 +25,8 @@ export default function Todos() {
   const done = todosDoneToday(state)
   const total = open.length + done.length
   const pct = total ? (done.length / total) * 100 : 0
+  // 重复待办单日只奖励一次：防止「取消今日完成 → 再勾回」反复刷 XP（刷新后失效，属宽恕优先的折中）
+  const rewardedToday = useRef(new Set())
 
   const add = () => {
     const s = text.trim()
@@ -41,7 +43,11 @@ export default function Todos() {
     dispatch({ type: 'TODO_TOGGLE', id: todo.id })
     if (nowDone) {
       sfx('check')
-      reward(dispatch, { ...REWARDS.todo, msg: '完成任务', icon: '✅', confetti: true })
+      const firstToday = !todo.repeat || !rewardedToday.current.has(todo.id)
+      if (firstToday) {
+        rewardedToday.current.add(todo.id)
+        reward(dispatch, { ...REWARDS.todo, msg: '完成任务', icon: '✅', confetti: true })
+      }
     } else {
       sfx('pop')
     }
@@ -60,6 +66,7 @@ export default function Todos() {
           <button className={`prio-flag ${prio ? 'on' : ''}`} title="标为优先" onClick={() => setPrio(!prio)}>⚑</button>
           <input
             value={text}
+            aria-label="新待办内容"
             placeholder="想完成点什么？回车快速添加"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}

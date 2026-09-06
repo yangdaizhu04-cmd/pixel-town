@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { dayKey, addDays, monthKey, daysBetween } from './dates.js'
 import { xpNeeded } from './gamify.js'
+import { WORDS } from './words.js'
 
 // ---------- 植物生长 ----------
 export const STAGE_PTS = [0, 2, 5, 9, 14]
@@ -404,7 +405,12 @@ function reducer(s, a) {
       return { ...s, english: e }
     }
     case 'ENGLISH_IMPORT': {
-      const have = new Set([...(s.english.custom || []).map((x) => x.w)])
+      // 兜底去重：custom + 内置词 + 已掌握词 全部排除，防止任何调用路径产生同名条目
+      const have = new Set([
+        ...(s.english.custom || []).map((x) => x.w),
+        ...WORDS.map((x) => x.w),
+        ...(s.english.known || []),
+      ])
       const add = (a.words || []).filter((x) => x.w && !have.has(x.w))
       return { ...s, english: { ...s.english, custom: [...(s.english.custom || []), ...add] } }
     }
@@ -471,8 +477,8 @@ export const todosDoneToday = (s) => {
   return s.todos.filter((x) => (x.done && x.day === t) || (x.repeat && x.lastDone === t))
 }
 
-export const habitStreak = (h) => {
-  let k = dayKey()
+export const habitStreak = (h, ref = dayKey()) => {
+  let k = ref
   if (!h.days[k]) k = addDays(k, -1)
   let n = 0
   while (h.days[k]) { n += 1; k = addDays(k, -1) }

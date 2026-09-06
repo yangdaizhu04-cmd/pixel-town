@@ -130,7 +130,7 @@ export default function Review() {
         ) : (
           <ul className="review-list">
             {history.map(([day, r]) => (
-              <li key={day} className="card review-item">
+              <li key={day} className="card review-item" onClick={() => loadDay(day)} title="点我回看 / 补写这一天">
                 <div className="review-item-head">
                   <PixelSprite name={MOOD_SPRITES[r.mood] || 'mood1'} scale={2} />
                   <b>{day === t ? '今天' : fmtShort(day)}</b>

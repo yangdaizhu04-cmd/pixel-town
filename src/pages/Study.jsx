@@ -247,13 +247,13 @@ export default function Study() {
       <Panel title="立一个新计划" icon="🎯">
         <div className="form-row">
           <Field label="计划名">
-            <input value={title} placeholder="比如：读完《深度工作》" onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPlan() }} />
+            <input value={title} aria-label="计划名称" placeholder="比如：读完《深度工作》" onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPlan() }} />
           </Field>
           <Field label="目标小时">
-            <input type="number" min="1" value={targetH} onChange={(e) => setTargetH(+e.target.value || 1)} />
+            <input type="number" min="1" aria-label="目标小时" value={targetH} onChange={(e) => setTargetH(+e.target.value || 1)} />
           </Field>
           <Field label="截止日期（可选）">
-            <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            <input type="date" aria-label="截止日期" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
           </Field>
           <Btn color="green" onClick={addPlan}>＋ 立计划</Btn>
         </div>

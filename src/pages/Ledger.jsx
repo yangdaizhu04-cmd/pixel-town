@@ -146,6 +146,7 @@ export default function Ledger() {
           />
           <input
             placeholder="备注（可选）"
+            aria-label="备注（可选）"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add() }}

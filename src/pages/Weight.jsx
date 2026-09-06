@@ -84,7 +84,7 @@ export default function Weight() {
         </div>
         <div className="form-row">
           <Field label="目标体重 kg（可选，画在曲线里）">
-            <input type="number" step="0.1" placeholder={goal ? `${goal}` : '比如 62'} value={goal ?? ''} onChange={(e) => setGoal(e.target.value)} />
+            <input type="number" step="0.1" placeholder={goal ? `${goal}` : '比如 62'} aria-label="目标体重（kg）" value={goal ?? ''} onChange={(e) => setGoal(e.target.value)} />
           </Field>
         </div>
         <p className="muted">数字只是参考，好好吃饭、好好睡觉比什么都重要 🌙</p>
