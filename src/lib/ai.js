@@ -1,0 +1,154 @@
+import { dayKey } from './dates.js'
+import { todosOpen, monthInOut, balanceOf, lastWeight, bmiOf, studyDone } from './store.jsx'
+
+// ---------- 主人数据的文字摘要（注入 system prompt，也供本地精灵使用） ----------
+export function dataSummary(state) {
+  const open = todosOpen(state)
+  const habits = state.habits
+  const habitDone = habits.filter((h) => h.days[dayKey()]).length
+  const { i, o } = monthInOut(state)
+  const w = lastWeight(state)
+  const bmi = bmiOf(state)
+  const lines = [
+    `- 等级 Lv.${state.profile.level}，金币 ${state.profile.coins}，连续投入 ${state.profile.streak} 天，今日 XP ${state.xpToday}`,
+    `- 今日待办还剩 ${open.length} 件${open.length ? '：' + open.slice(0, 3).map((x) => x.text).join('、') : '，全部完成啦'}（总待办 ${state.todos.length} 条）`,
+    `- 习惯打卡：今日 ${habitDone}/${habits.length} 个已完成（${habits.map((h) => h.icon + h.name).join('、') || '暂无习惯'}）`,
+    `- 本月记账：收入 ¥${i}，支出 ¥${o}，总结余 ¥${balanceOf(state)}`,
+    `- 最新体重 ${w ? w.kg + 'kg（' + w.day + '）' : '未记录'}${bmi ? '，BMI ' + bmi : ''}`,
+    `- 学习计划 ${state.study.length} 个：${state.study.map((p) => `${p.title}（${Math.round(studyDone(p) / 60 * 10) / 10}/${p.targetH}h）`).join('、') || '暂无'}`,
+    `- 复盘存档 ${Object.keys(state.reviews).length} 篇`,
+  ]
+  return lines.join('\n')
+}
+
+// ---------- 真实大模型（OpenAI 兼容接口） ----------
+export async function askAI({ state, input, signal }) {
+  const cfg = state.settings
+  if (!cfg.apiKey) throw new Error('NO_KEY')
+  const base = (cfg.baseUrl || '').replace(/\/+$/, '')
+  const history = state.chat.slice(-12).map((m) => ({ role: m.role, content: m.content }))
+  const system = [
+    '你是「拾光小镇」里的精灵管家「阿咕」，一只圆滚滚的像素小鸟。',
+    '说话风格：温暖、元气、简短，每次回复不超过 3 句，可以适量用 emoji 或颜文字（如 (๑•̀ㅂ•́)و、咕咕！）。',
+    '你会根据下面的小镇数据给主人具体的鼓励和建议；数据里没有的不要编造。',
+    '今天是 ' + dayKey() + '。主人的名字叫「' + (state.profile.name || '小镇居民') + '」。主人的小镇数据：\n' + dataSummary(state),
+  ].join('\n')
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    signal,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model || 'deepseek-chat',
+      temperature: 0.8,
+      max_tokens: 300,
+      messages: [{ role: 'system', content: system }, ...history, { role: 'user', content: input }],
+    }),
+  })
+  if (!res.ok) throw new Error(`API ${res.status}`)
+  const data = await res.json()
+  const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+  if (!text) throw new Error('空回复')
+  return text.trim()
+}
+
+// ---------- 本地小精灵（离线兜底：规则 + 数据感知） ----------
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+export function localAgent(input, state) {
+  const q = (input || '').trim()
+  const open = todosOpen(state)
+  const { i, o } = monthInOut(state)
+
+  // 记待办（「帮我记一条待办：xxx」「记待办 xxx」「待办：xxx」）
+  const mTodo =
+    q.match(/(?:帮我记|记)\s*(?:一)?\s*(?:条|个|下)?\s*待办[:：,，\s]*(.{2,40})/) ||
+    q.match(/待办[:：]\s*(.{2,40})/)
+  if (mTodo) {
+    return {
+      reply: `好嘞，已经帮你记下：「${mTodo[1]}」✅\n咕咕，完成的瞬间记得回来看看我～`,
+      action: { type: 'TODO_ADD', text: mTodo[1] },
+    }
+  }
+  // 记账（带金额）
+  const mLedger = q.match(/(?:记(?:一)?(?:笔)?账|花了?|支出?|买了?)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(?:元|块)?\s*(?:[:：,，]?\s*(.{0,12}))?/)
+  if (mLedger) {
+    const amount = +mLedger[1]
+    const note = (mLedger[2] || '').trim() || '随笔记了一笔'
+    return {
+      reply: `记好啦：支出 ¥${amount}（${note}）📒\n小钱包轻轻瘦了一点点，不过没关系～`,
+      action: { type: 'LEDGER_ADD', dir: 'out', amount, cat: '餐饮', note },
+    }
+  }
+  // 任务查询
+  if (/几件|还剩|待办|任务|要做什么|要干啥/.test(q)) {
+    if (!open.length) return { reply: '今天的事情全部做完啦！🎉 花园里的植物都在替你开心，去领奖箱吧～' }
+    return { reply: `今天还剩 ${open.length} 件事：\n${open.slice(0, 4).map((x, idx) => `${idx + 1}. ${x.text}`).join('\n')}\n一件一件来，阿咕陪你 (๑•̀ㅂ•́)و` }
+  }
+  // 花钱/余额
+  if (/余额|结余|花了多少|支出多少|多少钱|账单/.test(q)) {
+    return { reply: `这个月收入 ¥${i}，支出 ¥${o}，小镇总结余 ¥${balanceOf(state)} 💰\n${o > 3000 ? '花得有点猛哦，记得看看账单～' : '账本很健康，继续保持！'}` }
+  }
+  // 体重
+  if (/体重|胖|瘦|bmi|BMI/.test(q)) {
+    const w = lastWeight(state)
+    if (!w) return { reply: '还没有体重记录哦，去「体重记录」页称一下？咕咕会帮你画成小折线！' }
+    const bmi = bmiOf(state)
+    return { reply: `最新体重 ${w.kg}kg（${w.day}）${bmi ? `，BMI ${bmi}` : ''}。\n数字只是参考，规律作息才是正事～ 🌙` }
+  }
+  // 习惯
+  if (/习惯|打卡/.test(q)) {
+    const done = state.habits.filter((h) => h.days[dayKey()])
+    const left = state.habits.filter((h) => !h.days[dayKey()])
+    if (!state.habits.length) return { reply: '还没有习惯哦，去「习惯打卡」种下第一个小习惯吧！🌱' }
+    return { reply: `今日习惯 ${done.length}/${state.habits.length} 个完成 ✅${left.length ? `\n还差：${left.map((h) => h.icon + h.name).join('、')}` : '\n全部点亮，太厉害啦！'}` }
+  }
+  // 新闻
+  if (/新闻|资讯|最近有什么|AI 动态|AI动态/.test(q)) {
+    const items = state.news.items || []
+    if (!items.length) return { reply: '新闻小信鸽还没回来……去「每日AI新闻」页点一下刷新试试？📰' }
+    return { reply: `今日小镇日报 📰\n${items.slice(0, 2).map((x, idx) => `${idx + 1}. ${x.title}`).join('\n')}\n更多内容去新闻页看～` }
+  }
+  // 学习
+  if (/学习|计划|进度/.test(q)) {
+    if (!state.study.length) return { reply: '还没有学习计划哦，去「学习计划」立一个小目标？📚' }
+    const p = state.study[0]
+    return { reply: `「${p.title}」已完成 ${Math.round(studyDone(p) / 60 * 10) / 10} / ${p.targetH} 小时 ⏳\n每次记录 25 分钟就很棒，别一口气吃成胖子～` }
+  }
+  // 安慰
+  if (/加油|鼓励|难过|累|焦虑|压力大|emo|不开心|烦|哭/.test(q)) {
+    return { reply: pick([
+      '抱抱你 (｡•́︿•̀｡) 已经很努力了，剩下的交给时间。先喝口水，我们慢慢来。',
+      '累的时候允许自己停一停，小镇的植物也不会因为你休息一天就不长大 🌱',
+      '咕咕！把大石头敲成小石子：挑最小的一件事做完，心情就会亮起来一点点 ✨',
+    ]) }
+  }
+  // 笑话
+  if (/笑话|好笑|逗我/.test(q)) {
+    return { reply: pick([
+      '为什么像素小人不怕黑？因为他们自带 8-bit 的亮光 ✨（不好笑也请假笑一下，谢谢配合）',
+      '我给花园的植物讲了笑话，结果它们笑掉了叶子……阿咕含泪扫了一下午 🍃',
+      '程序员的浪漫：把「我喜欢你」写进注释里，永远不会被执行，也永远不会过期 💛',
+    ]) }
+  }
+  // 自我介绍
+  if (/你是谁|你叫什么|名字|介绍/.test(q)) {
+    return { reply: '我是阿咕，小镇的管家精灵 🐣 管账本、管待办、管浇花，还管在你低落时给你递一颗糖。' }
+  }
+  // 帮助
+  if (/帮助|能做什么|怎么用|功能/.test(q)) {
+    return { reply: '我可以：查待办、查账单、查体重、查学习进度、陪你聊天，还能「帮我记一条待办：xxx」或「记账 25 午饭」。\n在设置里填上 API Key，我会变得更聪明哦～' }
+  }
+  // 日期
+  if (/几号|星期几|日期|今天是/.test(q)) {
+    return { reply: `今天是 ${dayKey()}，星期${'日一二三四五六'[new Date().getDay()]}。小镇的一天从一杯水开始 💧` }
+  }
+  // 默认
+  return { reply: pick([
+    `咕咕～我在听。今天已经拿到 ${state.xpToday} XP 了，${open.length ? `还有 ${open.length} 件小事等着你` : '今天的事情都做完啦'} ✨`,
+    '（歪头）可以说「帮我记一条待办：……」或者问问我还剩几件事、这个月花了多少～',
+    '花园的向日葵又长高了一点 🌻 主人也要一起长高哦！',
+  ]) }
+}
