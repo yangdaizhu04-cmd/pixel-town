@@ -47,6 +47,10 @@ function seed() {
       decor: ['fence'],
       hat: '',
       achievements: {},
+      customAch: [],
+      rewards: [],
+      rewardsOwned: [],
+      rewardsDone: [],
       weightGoal: null,
       lastExportDay: '',
       stats: { todosDone: 12, ledger: 12, pomos: 0 },
@@ -58,9 +62,9 @@ function seed() {
     budgets: {},
     todos: [
       { id: uid(), text: '给小镇写一封本周小结', cat: '工作', prio: true, done: false, day: t, repeat: '' },
-      { id: uid(), text: '伸展 5 分钟，看看窗外的云', cat: '生活', prio: false, done: false, day: t, repeat: '' },
+      { id: uid(), text: '伸展 5 分钟，看看窗外的云', cat: '生活', prio: false, done: false, day: t, repeat: '', diff: 1 },
       { id: uid(), text: '把明天要用的资料打印好', cat: '工作', prio: false, done: false, day: addDays(t, 1), repeat: '' },
-      { id: uid(), text: '读完《深度工作》第 3 章', cat: '学习', prio: false, done: true, day: t, repeat: '' },
+      { id: uid(), text: '读完《深度工作》第 3 章', cat: '学习', prio: false, done: true, day: t, repeat: '', diff: 3 },
       { id: uid(), text: '回复合作邮件', cat: '工作', prio: false, done: true, day: d(1), repeat: '' },
       { id: uid(), text: '睡前把明天的水杯装满', cat: '生活', prio: false, done: false, day: t, repeat: 'daily', lastDone: '' },
       { id: uid(), text: '给阿咕的小花园拍张照', cat: '生活', prio: false, done: false, day: t, repeat: 'weekly', lastDone: '' },
@@ -80,9 +84,9 @@ function seed() {
       { id: uid(), day: d(9), type: 'out', amount: 120, cat: '娱乐', note: '桌游一局' },
     ],
     habits: [
-      { id: uid(), name: '喝够 8 杯水', icon: '💧', color: 'blue', days: { [d(4)]: 1, [d(3)]: 1, [d(2)]: 1, [d(1)]: 1, [t]: 1 } },
+      { id: uid(), name: '喝够 8 杯水', icon: '💧', color: 'blue', days: { [d(4)]: 1, [d(3)]: 1, [d(2)]: 1, [d(1)]: 1, [t]: 1 }, diff: 1 },
       { id: uid(), name: '拉伸 10 分钟', icon: '🧘', color: 'pink', days: { [d(3)]: 1, [d(2)]: 1, [t]: 1 } },
-      { id: uid(), name: '23:30 前睡觉', icon: '🛏️', color: 'orange', days: { [d(2)]: 1, [d(1)]: 1 } },
+      { id: uid(), name: '23:30 前睡觉', icon: '🛏️', color: 'orange', days: { [d(2)]: 1, [d(1)]: 1 }, diff: 3 },
       { id: uid(), name: '读 20 页书', icon: '📖', color: 'green', days: { [d(1)]: 1 } },
     ],
     study: [
@@ -162,6 +166,14 @@ export function hydrate(parsed) {
       },
     }
   }
+  // 难度字段兜底：旧档/未标的默认「普通」
+  s.todos = (s.todos || []).map((x) => ({ diff: 2, ...x }))
+  s.habits = (s.habits || []).map((x) => ({ diff: 2, ...x }))
+  // 自定义成就 / 愿望货架的字段兜底（旧档没有就先用空数组）
+  s.profile.customAch = s.profile.customAch || []
+  s.profile.rewards = s.profile.rewards || []
+  s.profile.rewardsOwned = s.profile.rewardsOwned || []
+  s.profile.rewardsDone = s.profile.rewardsDone || []
   return s
 }
 
@@ -246,8 +258,30 @@ function reducer(s, a) {
         P.decor = [...(P.decor || []), a.id]
       } else if (a.goods === 'hat') {
         P.hat = a.id
+      } else if (a.goods === 'reward') {
+        // 愿望奖励只能买一次
+        if ((P.rewardsOwned || []).includes(a.id)) return s
+        P.rewardsOwned = [...(P.rewardsOwned || []), a.id]
       }
       return { ...s, profile: P }
+    }
+    // 愿望货架：加一条自定义现实奖励
+    case 'REWARD_ADD':
+      return { ...s, profile: { ...P, rewards: [...(P.rewards || []), { id: uid(), name: a.name, cost: a.cost }] } }
+    case 'REWARD_DEL':
+      return {
+        ...s,
+        profile: {
+          ...P,
+          rewards: (P.rewards || []).filter((x) => x.id !== a.id),
+          rewardsOwned: (P.rewardsOwned || []).filter((x) => x !== a.id),
+          rewardsDone: (P.rewardsDone || []).filter((x) => x !== a.id),
+        },
+      }
+    // 兑现/撤销兑现：愿望完成了就打个勾（只有自己能判断，不涉及奖励）
+    case 'REWARD_REDEEM': {
+      const done = P.rewardsDone || []
+      return { ...s, profile: { ...P, rewardsDone: done.includes(a.id) ? done.filter((x) => x !== a.id) : [...done, a.id] } }
     }
     // 把一粒已解锁的种子种进空盆
     case 'PLANT_POT': {
@@ -277,12 +311,24 @@ function reducer(s, a) {
       if (P.achievements?.[a.id]) return s
       return { ...s, profile: { ...P, coins: P.coins + (a.coins || 0), achievements: { ...P.achievements, [a.id]: t } } }
     }
+    // 自定义成就：记录定义（解锁仍走 ACH_UNLOCK，统一入奖杯墙）
+    case 'ACH_CUSTOM_ADD':
+      return { ...s, profile: { ...P, customAch: [...(P.customAch || []), { id: `c-${uid()}`, ...a.meta }] } }
+    case 'ACH_CUSTOM_DEL':
+      return {
+        ...s,
+        profile: {
+          ...P,
+          customAch: (P.customAch || []).filter((x) => x.id !== a.id),
+          achievements: Object.fromEntries(Object.entries(P.achievements || {}).filter(([k]) => k !== a.id)),
+        },
+      }
 
     // ---------- 待办（v2 支持重复待办） ----------
     case 'TODO_ADD':
       return {
         ...s,
-        todos: [{ id: uid(), text: a.text, cat: a.cat || '生活', prio: !!a.prio, done: false, day: a.day || t, repeat: a.repeat || '', lastDone: '' }, ...s.todos],
+        todos: [{ id: uid(), text: a.text, cat: a.cat || '生活', prio: !!a.prio, done: false, day: a.day || t, repeat: a.repeat || '', lastDone: '', diff: a.diff || 2 }, ...s.todos],
       }
     case 'TODO_TOGGLE': {
       const todo = s.todos.find((x) => x.id === a.id)
@@ -333,7 +379,7 @@ function reducer(s, a) {
 
     // ---------- 习惯 ----------
     case 'HABIT_ADD':
-      return { ...s, habits: [...s.habits, { id: uid(), name: a.name, icon: a.icon, color: a.color || 'green', days: {} }] }
+      return { ...s, habits: [...s.habits, { id: uid(), name: a.name, icon: a.icon, color: a.color || 'green', days: {}, diff: a.diff || 2 }] }
     case 'HABIT_TOGGLE': {
       return {
         ...s,

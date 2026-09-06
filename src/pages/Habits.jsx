@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useApp, habitStreak } from '../lib/store.jsx'
 import { Panel, Btn, Empty, Chip, confirmBox } from '../components/ui.jsx'
-import { REWARDS, reward, sfx } from '../lib/gamify.js'
+import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx } from '../lib/gamify.js'
 import { dayKey, addDays, lastNDays, fmtShort, WEEKDAYS } from '../lib/dates.js'
 
 const EMOJIS = ['💧', '🏃', '📖', '🧘', '🎸', '🛏️', '🥗', '✏️', '🧹', '🌱']
@@ -12,6 +12,7 @@ export default function Habits() {
   const [name, setName] = useState('')
   const [icon, setIcon] = useState('💧')
   const [color, setColor] = useState('green')
+  const [diff, setDiff] = useState(2)
   const [weekOffset, setWeekOffset] = useState(0) // 0 = 本周，1 = 上周……
   const days = lastNDays(7, addDays(dayKey(), -weekOffset * 7))
   const t = dayKey()
@@ -21,8 +22,9 @@ export default function Habits() {
   const add = () => {
     const n = name.trim()
     if (!n) return
-    dispatch({ type: 'HABIT_ADD', name: n, icon, color })
+    dispatch({ type: 'HABIT_ADD', name: n, icon, color, diff })
     setName('')
+    setDiff(2)
     sfx('pop')
   }
 
@@ -32,7 +34,8 @@ export default function Habits() {
     dispatch({ type: 'HABIT_TOGGLE', id: habit.id, day })
     if (day === t && !wasChecked) {
       sfx('check')
-      reward(dispatch, { ...REWARDS.habit, msg: '习惯打卡', icon: habit.icon })
+      const r = rewardBy(REWARDS.habit, habit.diff)
+      reward(dispatch, { ...r, msg: `习惯打卡 · ${diffOf(habit).label}`, icon: habit.icon })
     } else {
       sfx('pop')
     }
@@ -70,6 +73,7 @@ export default function Habits() {
                   <div className="habit-name-cell">
                     <span className="habit-icon">{h.icon}</span>
                     <span className="habit-name">{h.name}</span>
+                    {diffOf(h).id !== 2 && <span className="diff-mark" title={`难度：${diffOf(h).label}`}>{diffOf(h).icon}</span>}
                     <button className="del" title="删除习惯" onClick={async () => { if (await confirmBox({ title: '删除习惯', message: `删除习惯「${h.name}」？它的打卡记录也会一起消失哦`, danger: true, okText: '删除' })) { dispatch({ type: 'HABIT_DEL', id: h.id }); sfx('oops') } }}>×</button>
                   </div>
                   {days.map((d) => {
@@ -118,6 +122,9 @@ export default function Habits() {
               <button key={c} className={`color-opt c-${c} ${color === c ? 'on' : ''}`} onClick={() => setColor(c)} title={c} />
             ))}
           </div>
+          <select value={diff} onChange={(e) => setDiff(Number(e.target.value))} title="难度：简单 ×0.6 · 普通 ×1 · 困难 ×1.6">
+            {DIFFS.map((d) => <option key={d.id} value={d.id}>{d.icon} {d.label}</option>)}
+          </select>
           <Btn color="green" onClick={add}>＋ 种下它</Btn>
         </div>
       </Panel>

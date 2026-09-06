@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { useApp, todosOpen, todosDoneToday } from '../lib/store.jsx'
 import { Panel, Btn, Bar, Empty, Chip, confirmBox } from '../components/ui.jsx'
-import { REWARDS, reward, sfx } from '../lib/gamify.js'
+import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx } from '../lib/gamify.js'
 import { dayKey, addDays } from '../lib/dates.js'
 
 const CATS = [
@@ -13,12 +13,19 @@ const CATS = [
 const catIcon = (c) => (CATS.find((x) => x.id === c) || CATS[3]).icon
 const REPEAT_LABEL = { daily: '↻ 每天', weekly: '↻ 每周' }
 
+// 难度标记：只有非普通才显示，避免普通任务刷屏
+function DiffMark({ diff }) {
+  const d = diffOf({ diff })
+  return d.id === 2 ? null : <Chip className="diff-mark" title={`难度：${d.label}`}>{d.icon} {d.label}</Chip>
+}
+
 export default function Todos() {
   const { state, dispatch } = useApp()
   const [text, setText] = useState('')
   const [cat, setCat] = useState('生活')
   const [prio, setPrio] = useState(false)
   const [repeat, setRepeat] = useState('')
+  const [diff, setDiff] = useState(2)
 
   const t = dayKey()
   const open = todosOpen(state).sort((a, b) => (b.prio - a.prio) || (a.day < b.day ? -1 : 1))
@@ -31,10 +38,11 @@ export default function Todos() {
   const add = () => {
     const s = text.trim()
     if (!s) return
-    dispatch({ type: 'TODO_ADD', text: s, cat, prio, repeat })
+    dispatch({ type: 'TODO_ADD', text: s, cat, prio, repeat, diff })
     setText('')
     setPrio(false)
     setRepeat('')
+    setDiff(2)
     sfx('pop')
   }
 
@@ -46,7 +54,8 @@ export default function Todos() {
       const firstToday = !todo.repeat || !rewardedToday.current.has(todo.id)
       if (firstToday) {
         rewardedToday.current.add(todo.id)
-        reward(dispatch, { ...REWARDS.todo, msg: '完成任务', icon: '✅', confetti: true })
+        const r = rewardBy(REWARDS.todo, todo.diff)
+        reward(dispatch, { ...r, msg: `完成任务 · ${diffOf(todo).label}`, icon: '✅', confetti: todo.diff === 3 })
       }
     } else {
       sfx('pop')
@@ -79,6 +88,9 @@ export default function Todos() {
             <option value="daily">↻ 每天</option>
             <option value="weekly">↻ 每周</option>
           </select>
+          <select value={diff} onChange={(e) => setDiff(Number(e.target.value))} title="难度：简单 ×0.6 · 普通 ×1 · 困难 ×1.6">
+            {DIFFS.map((d) => <option key={d.id} value={d.id}>{d.icon} {d.label}</option>)}
+          </select>
           <Btn color="green" onClick={add}>＋ 添加</Btn>
         </div>
 
@@ -92,6 +104,7 @@ export default function Todos() {
               {td.prio && <span className="prio-flag on" title="优先">⚑</span>}
               <span className="todo-text">{td.text}</span>
               {td.repeat && <Chip color="blue">{REPEAT_LABEL[td.repeat]}</Chip>}
+              <DiffMark diff={td.diff} />
               {!td.repeat && td.day < t && (
                 <>
                   <Chip className="todo-day">{td.day.slice(5)} 逾期</Chip>
@@ -124,7 +137,7 @@ export default function Todos() {
         )}
       >
         {done.length === 0 ? (
-          <Empty icon="⏳">还没有完成记录。完成第一件事，来拿 +10 XP！</Empty>
+          <Empty icon="⏳">还没有完成记录。完成第一件事，来拿 XP 奖励！</Empty>
         ) : (
           <ul className="todo-list done-list">
             {done.map((td) => (
@@ -132,6 +145,7 @@ export default function Todos() {
                 <button className="check on" title={td.repeat ? '取消今日完成' : '放回清单'} onClick={() => toggle(td)} />
                 <span className="todo-text">{td.text}</span>
                 {td.repeat && <Chip color="blue">{REPEAT_LABEL[td.repeat]} 明天再来</Chip>}
+                <DiffMark diff={td.diff} />
                 <Chip>{catIcon(td.cat)} {td.cat}</Chip>
                 <button className="del" title="删除" onClick={() => { dispatch({ type: 'TODO_DEL', id: td.id }); sfx('oops') }}>×</button>
               </li>

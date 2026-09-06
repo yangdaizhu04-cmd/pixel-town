@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useApp } from '../lib/store.jsx'
-import { Panel, Empty } from '../components/ui.jsx'
+import { Panel, Modal, Btn, Bar, Field, Empty, confirmBox } from '../components/ui.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
-import { ACHIEVEMENTS } from '../lib/achievements.js'
+import { ACHIEVEMENTS, ACH_METRICS, metricOf, customValue, customDesc } from '../lib/achievements.js'
 import { PLANT_META } from '../lib/shop.js'
+import { sfx, emit } from '../lib/gamify.js'
 import { dayKey, addDays, parseKey, fmtShort } from '../lib/dates.js'
 
 // ---------- XP 热力图（26 周，GitHub 贡献图的小镇版） ----------
@@ -78,9 +79,10 @@ function Collection({ state }) {
   )
 }
 
-// ---------- 成就墙 ----------
-function TrophyWall({ state }) {
+// ---------- 成就墙（内置 + 自定义） ----------
+function TrophyWall({ state, onClaim, onDel }) {
   const unlocked = state.profile.achievements || {}
+  const custom = state.profile.customAch || []
   return (
     <div className="ach-grid">
       {ACHIEVEMENTS.map((a) => {
@@ -95,14 +97,114 @@ function TrophyWall({ state }) {
           </div>
         )
       })}
+      {custom.map((a) => {
+        const day = unlocked[a.id]
+        const m = metricOf(a.metric)
+        const val = customValue(a, state)
+        const isManual = a.metric === 'manual'
+        return (
+          <div key={a.id} className={`ach-item card cust ${day ? 'on' : 'dim'}`} title={customDesc(a)}>
+            <span className="ach-icon">{day ? (m?.icon || '🕯️') : '🔒'}</span>
+            <div className="ach-info">
+              <b>
+                <span className="ach-name">{a.name}</span>
+                {day === undefined && isManual && (
+                  <span className="ach-marks">
+                    <Btn size="xs" color="green" onClick={() => onClaim(a)}>点亮</Btn>
+                  </span>
+                )}
+                <button className="del" title="删除自定义成就" onClick={() => onDel(a)}>×</button>
+              </b>
+              <span>
+                {day ? `${fmtShort(day)} 达成 · +${a.coins} 🪙` : `${customDesc(a)} · +${a.coins} 🪙`}
+              </span>
+              {!day && !isManual && (
+                <Bar pct={(val / Math.max(1, a.target)) * 100} color="green" className="ach-progress" />
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
+// ---------- 新建自定义成就 ----------
+function CustomAchModal({ open, onClose }) {
+  const { dispatch } = useApp()
+  const [name, setName] = useState('')
+  const [metric, setMetric] = useState('todosDone')
+  const [target, setTarget] = useState(10)
+  const [coins, setCoins] = useState(10)
+
+  const add = () => {
+    const n = name.trim()
+    if (!n) return
+    if (metric !== 'manual' && target < 1) return
+    dispatch({
+      type: 'ACH_CUSTOM_ADD',
+      meta: {
+        name: n,
+        metric,
+        target: metric === 'manual' ? 0 : Math.max(1, Math.round(target)),
+        coins: Math.max(0, Math.min(60, Math.round(coins))),
+      },
+    })
+    sfx('pop')
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="🎯 自定义成就">
+      <div className="field-stack">
+        <Field label="成就名称（想庆祝的那件事）">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：读完 10 本书" autoFocus />
+        </Field>
+        <Field label="达成方式">
+          <select value={metric} onChange={(e) => setMetric(e.target.value)}>
+            {ACH_METRICS.map((m) => <option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}
+            <option value="manual">🕯️ 手动点亮（自己的心愿）</option>
+          </select>
+        </Field>
+        {metric !== 'manual' && (
+          <Field label="目标值">
+            <input type="number" min={1} value={target} onChange={(e) => setTarget(Number(e.target.value))} />
+          </Field>
+        )}
+        <Field label="解锁奖励金币（0-60）">
+          <input type="number" min={0} max={60} value={coins} onChange={(e) => setCoins(Number(e.target.value))} />
+        </Field>
+        <p className="muted">计数型成就达到目标会自动解锁；手动心愿则由你亲手点亮。</p>
+      </div>
+      <div className="modal-foot">
+        <Btn onClick={onClose}>再想想</Btn>
+        <Btn color="green" onClick={add} disabled={!name.trim()}>建立成就</Btn>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Museum() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
+  const [achOpen, setAchOpen] = useState(false)
   const totalXp = Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0)
+  const customAch = state.profile.customAch || []
   const achCount = Object.keys(state.profile.achievements || {}).length
+
+  const claim = async (a) => {
+    if (await confirmBox({ title: '点亮心愿', message: `点亮「${a.name}」拿 ${a.coins} 金币？\n点亮后不可撤销（宽恕优先，想反悔就再建一个 😉）` })) {
+      dispatch({ type: 'ACH_UNLOCK', id: a.id, coins: a.coins })
+      sfx('coin')
+      emit('toast', { icon: '🏆', text: `点亮成就「${a.name}」！+${a.coins} 金币` })
+    }
+  }
+
+  const del = async (a) => {
+    if (await confirmBox({ title: '删除自定义成就', message: `删除「${a.name}」？解锁记录也会一起清掉`, danger: true, okText: '删除' })) {
+      dispatch({ type: 'ACH_CUSTOM_DEL', id: a.id })
+      sfx('oops')
+    }
+  }
 
   return (
     <>
@@ -125,10 +227,17 @@ export default function Museum() {
 
       <Panel
         title="成就奖杯墙" icon="🏆"
-        extra={<span className="xp-pill">{achCount} / {ACHIEVEMENTS.length} 枚奖杯</span>}
+        extra={
+          <div className="btn-row">
+            <span className="xp-pill">{achCount} / {ACHIEVEMENTS.length + customAch.length} 枚奖杯</span>
+            <Btn size="sm" color="gold" onClick={() => setAchOpen(true)}>＋ 自定义成就</Btn>
+          </div>
+        }
       >
-        <TrophyWall state={state} />
+        <TrophyWall state={state} onClaim={claim} onDel={del} />
       </Panel>
+
+      <CustomAchModal open={achOpen} onClose={() => setAchOpen(false)} />
     </>
   )
 }

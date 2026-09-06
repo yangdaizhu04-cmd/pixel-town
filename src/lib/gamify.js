@@ -18,6 +18,20 @@ export const REWARDS = {
   review: { xp: 15, coins: 5 },
 }
 
+// ---------- 任务难度（做难事和划水终于有区别了） ----------
+export const DIFFS = [
+  { id: 1, icon: '🌱', label: '简单' },
+  { id: 2, icon: '⭐', label: '普通' },
+  { id: 3, icon: '🔥', label: '困难' },
+]
+export const DIFF_MULT = { 1: 0.6, 2: 1, 3: 1.6 }
+export const diffOf = (x) => DIFFS.find((d) => d.id === (x?.diff || 2)) || DIFFS[1]
+// 按难度缩放奖励（四舍五入，至少保底 1 XP/1 金币）
+export const rewardBy = (base, diff) => ({
+  xp: Math.max(1, Math.round(base.xp * (DIFF_MULT[diff] ?? 1))),
+  coins: Math.max(1, Math.round(base.coins * (DIFF_MULT[diff] ?? 1))),
+})
+
 export const MILESTONES = [
   { at: 25, coins: 8, label: '小奖箱' },
   { at: 50, coins: 12, label: '大奖箱' },

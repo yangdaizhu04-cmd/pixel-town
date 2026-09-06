@@ -100,13 +100,23 @@ export default function App() {
     levelRef.current = state.profile.level
   }, [state.profile.level])
 
-  // 成就检测：每次状态变化跑一遍纯函数判定，解锁的发金币 + 喜报
+  // 成就检测：内置 + 自定义计数型，每次状态变化跑一遍纯函数判定，解锁的发金币 + 喜报
   useEffect(() => {
+    const unlocked = state.profile.achievements || {}
     for (const a of ACHIEVEMENTS) {
-      if (!state.profile.achievements?.[a.id] && a.check(state, PLANT_META.length)) {
+      if (!unlocked[a.id] && a.check(state, PLANT_META.length)) {
         dispatch({ type: 'ACH_UNLOCK', id: a.id, coins: a.coins })
         sfx('coin')
         emit('toast', { icon: '🏆', text: `解锁成就「${a.name}」！+${a.coins} 金币` })
+      }
+    }
+    for (const c of state.profile.customAch || []) {
+      if (c.metric === 'manual') continue
+      const val = c.metric === 'streak' ? state.profile.streak : (state.profile.stats?.[c.metric] || 0)
+      if (!unlocked[c.id] && val >= c.target) {
+        dispatch({ type: 'ACH_UNLOCK', id: c.id, coins: c.coins })
+        sfx('coin')
+        emit('toast', { icon: '🏆', text: `解锁成就「${c.name}」！+${c.coins} 金币` })
       }
     }
   }, [state]) // eslint-disable-line react-hooks/exhaustive-deps

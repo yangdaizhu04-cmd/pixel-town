@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useApp } from '../lib/store.jsx'
-import { Modal, Btn, Chip } from './ui.jsx'
+import { Modal, Btn, Chip, Empty, confirmBox } from './ui.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { MAX_POTS, PLANT_META, DECOR_GOODS, HAT_GOODS } from '../lib/shop.js'
 import { sfx, emit } from '../lib/gamify.js'
@@ -10,6 +10,7 @@ const TABS = [
   { id: 'seed', label: '🌰 种子' },
   { id: 'decor', label: '🏡 装饰' },
   { id: 'hat', label: '🎩 阿咕的帽子' },
+  { id: 'wish', label: '🕯️ 愿望货架' },
 ]
 
 function Item({ name, desc, cost, sprite, owned, disabled, reason, onBuy }) {
@@ -32,8 +33,13 @@ function Item({ name, desc, cost, sprite, owned, disabled, reason, onBuy }) {
 export default function ShopModal({ open, onClose }) {
   const { state, dispatch } = useApp()
   const [tab, setTab] = useState('pot')
+  const [wishName, setWishName] = useState('')
+  const [wishCost, setWishCost] = useState(30)
   const { profile } = state
   const coins = profile.coins
+  const rewards = profile.rewards || []
+  const rewardsOwned = profile.rewardsOwned || []
+  const rewardsDone = profile.rewardsDone || []
 
   const buy = (goods, id, cost) => {
     if (coins < cost) {
@@ -44,6 +50,28 @@ export default function ShopModal({ open, onClose }) {
     dispatch({ type: 'SHOP_BUY', goods, id, cost })
     sfx('buy')
     emit('toast', { icon: '🛒', text: '买好啦，谢谢惠顾！' })
+  }
+
+  const addWish = () => {
+    const n = wishName.trim()
+    if (!n || wishCost < 1) return
+    dispatch({ type: 'REWARD_ADD', name: n, cost: Math.max(5, Math.round(wishCost)) })
+    setWishName('')
+    setWishCost(30)
+    sfx('pop')
+    emit('toast', { icon: '🕯️', text: '愿望挂上货架啦，拿金币来兑现它！' })
+  }
+
+  const redeem = (id) => {
+    dispatch({ type: 'REWARD_REDEEM', id })
+    sfx('check')
+  }
+
+  const delWish = async (id, name) => {
+    if (await confirmBox({ title: '取下愿望', message: `把「${name}」从货架取下？买它的钱不会退回哦`, danger: true, okText: '取下' })) {
+      dispatch({ type: 'REWARD_DEL', id })
+      sfx('oops')
+    }
   }
 
   const potCount = profile.pots.length
@@ -115,6 +143,54 @@ export default function ShopModal({ open, onClose }) {
               />
             ))}
             <p className="muted">帽子一次只能戴一顶，新买的会自动戴上，聊天页能看到～</p>
+          </div>
+        )}
+
+        {tab === 'wish' && (
+          <div className="shop-list">
+            <div className="wish-form">
+              <input
+                className="wish-name"
+                value={wishName}
+                aria-label="愿望内容"
+                placeholder="想奖励自己什么？比如「看一场电影」"
+                onChange={(e) => setWishName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addWish() }}
+              />
+              <input
+                className="wish-cost"
+                type="number" min={5} step={5}
+                aria-label="愿望定价"
+                value={wishCost}
+                onChange={(e) => setWishCost(Number(e.target.value))}
+                title="用金币定价"
+              />
+              <Btn size="sm" color="green" onClick={addWish} disabled={!wishName.trim() || wishCost < 1}>➕ 许愿</Btn>
+            </div>
+            {rewards.length === 0 ? (
+              <Empty icon="🕯️">给未来自己留个盼头：写下想奖励的事情，定个价格挂在货架上。攒够金币买下它，然后去兑现！</Empty>
+            ) : (
+              rewards.map((r) => {
+                const owned = rewardsOwned.includes(r.id)
+                const done = rewardsDone.includes(r.id)
+                return (
+                  <div key={r.id} className={`shop-item card ${owned ? 'owned' : ''} ${done ? 'used' : ''}`}>
+                    <span className="wish-icon">{done ? '🎉' : owned ? '🎁' : '🕯️'}</span>
+                    <div className="shop-info">
+                      <b>{r.name}</b>
+                      <span className="shop-desc">{done ? '已兑现 · 说到做到，真棒！' : owned ? '已买下，挂在货架上等你兑现' : '许下的愿望'}</span>
+                    </div>
+                    {owned ? (
+                      <Btn size="sm" color={done ? 'blue' : 'green'} onClick={() => redeem(r.id)}>{done ? '撤销兑现' : '✓ 兑现'}</Btn>
+                    ) : (
+                      <Btn size="sm" color="gold" disabled={coins < r.cost} onClick={() => buy('reward', r.id, r.cost)}>🪙 {r.cost}</Btn>
+                    )}
+                    <button className="del" title="取下愿望" onClick={() => delWish(r.id, r.name)}>×</button>
+                  </div>
+                )
+              })
+            )}
+            <p className="muted">愿望货架上的「现实奖励」用金币买下后就会一直挂在上面，等你说到做到、亲手兑现。</p>
           </div>
         )}
       </div>

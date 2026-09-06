@@ -16,3 +16,19 @@ export const ACHIEVEMENTS = [
   { id: 'water-100', icon: '💧', name: '百次浇灌', desc: '花园被浇灌 100 次', coins: 15, check: (s) => (s.profile.waterTotal || 0) >= 100 },
   { id: 'pomo-10', icon: '⏰', name: '十个番茄', desc: '完成 10 个番茄钟', coins: 15, check: (s) => (s.profile.stats?.pomos || 0) >= 10 },
 ]
+
+// ---------- 自定义成就（计数型指标从现有数据里选） ----------
+export const ACH_METRICS = [
+  { id: 'todosDone', icon: '📝', label: '完成待办', unit: '件' },
+  { id: 'pomos', icon: '🍅', label: '完成番茄钟', unit: '个' },
+  { id: 'ledger', icon: '🧾', label: '记一笔账', unit: '笔' },
+  { id: 'streak', icon: '🔥', label: '连续投入', unit: '天' },
+  { id: 'waterTotal', icon: '💧', label: '浇灌花园', unit: '次' },
+]
+export const metricOf = (id) => ACH_METRICS.find((m) => m.id === id)
+export const customValue = (ach, s) => (ach.metric === 'streak' ? s.profile.streak : (s.profile.stats?.[ach.metric] || 0))
+export const customDesc = (ach) => {
+  if (ach.metric === 'manual') return '自己点亮的心愿，达成了就亲手点亮它'
+  const m = metricOf(ach.metric)
+  return `${m?.label ?? ach.metric}达到 ${ach.target} ${m?.unit ?? ''}`
+}
