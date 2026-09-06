@@ -297,9 +297,10 @@ function reducer(s, a) {
         }
       }
       const nowDone = !todo.done
+      // 完成逾期待办时把 day 挪到今天：否则该条会「既不在清单、也不在今日已完成」而凭空消失（全面检查发现）
       return {
         ...s,
-        todos: s.todos.map((x) => (x.id === a.id ? { ...x, done: nowDone } : x)),
+        todos: s.todos.map((x) => (x.id === a.id ? { ...x, done: nowDone, day: nowDone ? t : x.day } : x)),
         profile: nowDone ? { ...P, stats: { ...P.stats, todosDone: (P.stats?.todosDone || 0) + 1 } } : s.profile,
       }
     }

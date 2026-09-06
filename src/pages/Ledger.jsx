@@ -184,7 +184,7 @@ export default function Ledger() {
             </select>
             <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
               <option value="">全部分类</option>
-              {CATS_OUT.concat(CATS_IN).map((c) => <option key={c.id} value={c.id}>{c.icon} {c.id}</option>)}
+              {CATS_OUT.concat(CATS_IN).map((c, i) => <option key={`${c.id}-${i}`} value={c.id}>{c.icon} {c.id}</option>)}
             </select>
             <Btn size="sm" onClick={exportCsv}>⬇ CSV</Btn>
           </div>
