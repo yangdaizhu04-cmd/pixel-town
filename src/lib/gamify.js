@@ -39,6 +39,12 @@ export const MILESTONES = [
   { at: XP_GOAL, coins: 25, label: '传说箱' },
 ]
 
+// ---------- 盲盒：金额随机浮动 ±30%，8% 概率开「惊喜」（解锁新种子或金币兜底） ----------
+export function rollChest(base) {
+  const coins = Math.max(4, Math.round(base * (0.7 + Math.random() * 0.6)))
+  return { coins, bonus: Math.random() < 0.08 }
+}
+
 export const WATER_COST = 2 // 每天第一次免费，之后消耗金币
 
 // ---------- 奖励：派发 + 冒泡 ----------

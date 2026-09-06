@@ -226,6 +226,9 @@ function reducer(s, a) {
       P.coins += a.coins
       return { ...s, profile: P, claimed: { ...s.claimed, [t]: [...list, a.at] } }
     }
+    // 盲盒惊喜的金币兜底（只用金币，不触发连续/浇水等完全体奖励）
+    case 'CHEST_BONUS':
+      return { ...s, profile: { ...P, coins: P.coins + (a.coins || 0) } }
 
     case 'WATER': {
       if ((a.cost || 0) > P.coins) return s
@@ -415,7 +418,7 @@ function reducer(s, a) {
         ...s,
         profile: NP,
         study: s.study.map((p) => (p.id === a.planId
-          ? { ...p, sessions: [...p.sessions, { day: t, min: a.min, note: a.note || '🍅 番茄钟' }] }
+          ? { ...p, sessions: [...p.sessions, { day: t, min: a.min, note: a.note || '🍅 番茄钟', h: a.h ?? null }] }
           : p)),
       }
     }

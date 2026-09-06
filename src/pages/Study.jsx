@@ -161,6 +161,24 @@ export default function Study() {
     value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.day === d).reduce((n, x) => n + x.min, 0), 0),
     color: 'gold',
   }))
+  // 专注统计：近 14 天时长 + 时段分布（只统计带时刻的新记录）
+  const days14 = lastNDays(14, t).map((d) => ({
+    label: String(+d.slice(8, 10)),
+    value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.day === d).reduce((n, x) => n + x.min, 0), 0),
+    color: 'green',
+  }))
+  const total14 = days14.reduce((m, x) => m + x.value, 0)
+  const SLOTS = [
+    { id: 'dawn', label: '🌅 清晨', a: 5, b: 9 },
+    { id: 'am', label: '☀️ 上午', a: 9, b: 12 },
+    { id: 'pm', label: '🌤️ 下午', a: 12, b: 18 },
+    { id: 'eve', label: '🌙 晚间', a: 18, b: 23 },
+    { id: 'night', label: '🌌 深夜', a: 23, b: 24 },
+  ]
+  const slotMin = (a, b) =>
+    state.study.reduce((m, p) => m + p.sessions.filter((x) => x.h != null && x.h >= a && x.h < b).reduce((n, x) => n + x.min, 0), 0)
+  const slots = SLOTS.map((s) => ({ label: s.label, value: slotMin(s.a, s.b), color: 'orange' }))
+  const withHour = state.study.reduce((m, p) => m + p.sessions.filter((x) => x.h != null).length, 0)
 
   const addPlan = () => {
     const n = title.trim()
@@ -187,6 +205,12 @@ export default function Study() {
 
       <Panel title="本周学习时长" icon="⏳" extra={<span className="xp-pill">本周共 {week.reduce((m, x) => m + x.value, 0)} 分钟</span>}>
         {state.study.length === 0 ? <Empty icon="📚">先立一个小目标吧！</Empty> : <Bars data={week} rows={8} scale={34} fmt={(v) => `${v}min`} />}
+      </Panel>
+
+      <Panel title="专注分布" icon="📈" extra={<span className="xp-pill">近 14 天 {total14} 分钟</span>}>
+        <Bars data={days14} rows={8} scale={30} fmt={(v) => `${v}m`} />
+        <p className="muted">你在一天里的哪个时间段更容易专注？{withHour === 0 ? '完成一次番茄钟后这里就有答案了～' : `（已统计 ${withHour} 次带时刻的记录）`}</p>
+        <Bars data={slots} rows={6} scale={36} fmt={(v) => `${v}m`} />
       </Panel>
 
       <Panel title="我的学习计划" icon="📚">

@@ -5,7 +5,7 @@ import { PixelSprite } from '../lib/sprites.jsx'
 import { ACHIEVEMENTS, ACH_METRICS, metricOf, customValue, customDesc } from '../lib/achievements.js'
 import { PLANT_META } from '../lib/shop.js'
 import { sfx, emit } from '../lib/gamify.js'
-import { dayKey, addDays, parseKey, fmtShort } from '../lib/dates.js'
+import { dayKey, addDays, parseKey, fmtShort, fmtLong, lastNDays } from '../lib/dates.js'
 
 // ---------- XP 热力图（26 周，GitHub 贡献图的小镇版） ----------
 const HEAT = ['#efe3c4', '#cfe8b8', '#a8d78d', '#79b851', '#ffd34e']
@@ -184,9 +184,118 @@ function CustomAchModal({ open, onClose }) {
   )
 }
 
+// ---------- 分享卡片：像素风画布，可保存成图片 ----------
+function ShareCard({ state, open, onClose }) {
+  const ref = useRef(null)
+  const FONT = '"Fusion Pixel 12px Proportional Simplified Chinese","Fusion Pixel 12px Proportional SC",monospace'
+  const names = Object.keys(state.profile.achievements || {})
+  const totalXp = Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0)
+  const t = dayKey()
+  const weeks = 4
+  const heatDays = lastNDays(weeks * 7, t)
+
+  useEffect(() => {
+    if (!open) return
+    const run = () => {
+      const c = ref.current
+      if (!c) return
+      const W = 420
+      const H = 620
+      c.width = W * 2
+      c.height = H * 2
+      const ctx = c.getContext('2d')
+      ctx.scale(2, 2)
+      // 纸底 + 像素描边
+      ctx.fillStyle = '#fdf6e3'
+      ctx.fillRect(0, 0, W, H)
+      ctx.fillStyle = '#5b4a38'
+      const B = 8
+      ctx.fillRect(0, 0, W, B)
+      ctx.fillRect(0, H - B, W, B)
+      ctx.fillRect(0, 0, B, H)
+      ctx.fillRect(W - B, 0, B, H)
+      ctx.textAlign = 'center'
+      // 标题
+      ctx.fillStyle = '#4a3b2a'
+      ctx.font = `18px ${FONT}`
+      ctx.fillText('拾光小镇 · 我的小镇日志', W / 2, 52)
+      ctx.fillStyle = '#8a7a62'
+      ctx.font = `12px ${FONT}`
+      ctx.fillText(`${fmtLong(t).replace('· ', '')}`, W / 2, 74)
+      // 战绩
+      ctx.fillStyle = '#4a3b2a'
+      ctx.font = `15px ${FONT}`
+      const line1 = `Lv.${state.profile.level}  ·  累计 ${totalXp} XP  ·  连续 ${state.profile.streak} 天`
+      ctx.fillText(line1, W / 2, 118)
+      ctx.fillStyle = '#c77c1e'
+      ctx.fillText(`🪙 ${state.profile.coins} 金币  ·  点亮 ${names.length} 枚奖杯`, W / 2, 146)
+      // 近一周热力格
+      const cell = 12
+      const gap = 4
+      const gridW = weeks * cell + (weeks - 1) * gap
+      const x0 = (W - gridW) / 2
+      const y0 = 176
+      heatDays.forEach((d, i) => {
+        const xp = state.xpLog?.[d] || 0
+        ctx.fillStyle = HEAT[heatIdx(xp)]
+        ctx.fillRect(x0 + (i % weeks) * (cell + gap), y0 + Math.floor(i / weeks) * (cell + gap), cell, cell)
+      })
+      ctx.fillStyle = '#8a7a62'
+      ctx.font = `11px ${FONT}`
+      ctx.fillText('最近四周的每一天', W / 2, y0 + 4 * (cell + gap) + 14)
+      // 最近解锁的三枚奖杯
+      const recent = names.slice(-3)
+      recent.forEach((id, i) => {
+        const ach = [...ACHIEVEMENTS, ...(state.profile.customAch || [])].find((a) => a.id === id)
+        ctx.fillStyle = '#f4e3b8'
+        const ry = 240 + i * 52
+        ctx.fillRect(40, ry, W - 80, 40)
+        ctx.textAlign = 'left'
+        ctx.fillStyle = '#4a3b2a'
+        ctx.font = `13px ${FONT}`
+        ctx.fillText(`${ach?.icon || '🏆'} ${ach?.name || id}`, 56, ry + 17)
+        ctx.fillStyle = '#8a7a62'
+        ctx.font = `11px ${FONT}`
+        ctx.fillText(`${fmtShort(state.profile.achievements[id])} 达成  ·  +${ach?.coins ?? 0} 金币`, 56, ry + 32)
+        ctx.textAlign = 'center'
+      })
+      // 签名
+      ctx.fillStyle = '#8a7a62'
+      ctx.font = `13px ${FONT}`
+      ctx.fillText('—— 把每天的进步，都种进花园里', W / 2, H - 44)
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(run).catch(run)
+    else run()
+  }, [open, state, t]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = () => {
+    const c = ref.current
+    if (!c) return
+    const a = document.createElement('a')
+    a.download = `拾光小镇分享卡-${t}.png`
+    a.href = c.toDataURL('image/png')
+    a.click()
+    sfx('pop')
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="📸 分享卡" wide>
+      <div className="share-card-wrap">
+        <canvas ref={ref} className="share-card" style={{ width: 420, imageRendering: 'pixelated' }} />
+        <p className="muted">像素风分享卡：保存后发到群里，让朋友看看你的小镇有多热闹。</p>
+      </div>
+      <div className="modal-foot">
+        <Btn onClick={onClose}>再改改</Btn>
+        <Btn color="green" onClick={save}>💾 保存图片</Btn>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Museum() {
   const { state, dispatch } = useApp()
   const [achOpen, setAchOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const totalXp = Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0)
   const customAch = state.profile.customAch || []
   const achCount = Object.keys(state.profile.achievements || {}).length
@@ -210,7 +319,12 @@ export default function Museum() {
     <>
       <Panel
         title="小镇半年鉴" icon="🗺️"
-        extra={<span className="xp-pill">历史累计 {totalXp} XP</span>}
+        extra={
+          <div className="btn-row">
+            <span className="xp-pill">历史累计 {totalXp} XP</span>
+            <Btn size="sm" color="gold" onClick={() => setShareOpen(true)}>📸 分享卡</Btn>
+          </div>
+        }
       >
         <p className="muted">每一格是一天：颜色越亮，那天的小镇越热闹。金色是冲破 90 XP 的日子！</p>
         <Heatmap xpLog={state.xpLog} />
@@ -238,6 +352,7 @@ export default function Museum() {
       </Panel>
 
       <CustomAchModal open={achOpen} onClose={() => setAchOpen(false)} />
+      <ShareCard state={state} open={shareOpen} onClose={() => setShareOpen(false)} />
     </>
   )
 }

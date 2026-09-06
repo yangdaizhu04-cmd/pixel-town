@@ -83,7 +83,7 @@ export default function App() {
       emit('toast', { icon: '☀️', text: '休息完毕！准备好就开始下一个番茄吧' })
       return
     }
-    dispatch({ type: 'POMO_DONE', min, planId })
+    dispatch({ type: 'POMO_DONE', min, planId, h: new Date().getHours() })
     const xp = Math.min(30, Math.max(5, Math.round((min / 30) * 10)))
     const coins = min >= 30 ? 3 : 1
     reward(dispatch, { xp, coins, msg: `专注 ${min} 分钟`, icon: '🍅', confetti: true })

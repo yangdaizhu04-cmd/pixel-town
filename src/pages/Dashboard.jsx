@@ -203,7 +203,7 @@ export default function Dashboard() {
               >
                 {got ? <span className="gift-done">✓</span> : <PixelSprite name="gift" scale={4} className={can ? '' : 'dim'} />}
                 <span className="gift-xp">{m.at} XP</span>
-                <span className="gift-coin">奖赏 +{m.coins} 🪙</span>
+                <span className="gift-coin">奖赏 🎁 盲盒</span>
               </button>
             )
           })}

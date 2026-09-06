@@ -735,3 +735,13 @@ textarea { resize: vertical; width: 100%; }
 .wish-icon { font-size: 22px; }
 .shop-item.used { opacity: 1; border-color: var(--green); box-shadow: inset 0 0 0 2px var(--green-pale); }
 .shop-item .del { margin-left: 2px; }
+
+/* ---------- v3b：每周小结 / 番茄分布 / 分享卡 ---------- */
+.report-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.report-chip {
+  font-size: 13px; background: var(--green-pale); padding: 4px 10px; border-radius: 3px;
+  box-shadow: 0 -2px 0 0 var(--sand2), 0 2px 0 0 var(--sand2), -2px 0 0 0 var(--sand2), 2px 0 0 0 var(--sand2);
+}
+.report-chip b { font-size: 15px; }
+.share-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.share-card { box-shadow: 0 -2px 0 0 var(--line), 0 2px 0 0 var(--line), -2px 0 0 0 var(--line), 2px 0 0 0 var(--line); }
