@@ -9,4 +9,5 @@ export default defineConfig({
   plugins: [react(), viteSingleFile()],
   base: './',
   server: { host: true },
+  test: { environment: 'jsdom' },
 })

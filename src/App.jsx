@@ -7,6 +7,7 @@ import { Chip, Btn, Bar, ConfirmHost } from './components/ui.jsx'
 import { ToastHost, ConfettiHost, LevelUpModal } from './components/effects.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import { pomoSubscribe, pomoStartBreak, pomoSnap } from './lib/pomo.js'
+import { webdavUpload, backupFilename, backupPayload } from './lib/webdav.js'
 import { ACHIEVEMENTS } from './lib/achievements.js'
 import { PLANT_META } from './lib/shop.js'
 import { dayKey, pickByDay, daysBetween } from './lib/dates.js'
@@ -82,6 +83,26 @@ export default function App() {
   useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
   useEffect(() => { notifyRef.current = state.settings.notify }, [state.settings.notify])
 
+  // WebDAV 自动备份：设置了地址且打开开关后，每天首次访问自动传一份（密钥不入档）
+  const autoBackupSent = useRef(null)
+  useEffect(() => {
+    const st = state.settings
+    if (!st.autoBackup || !st.webdavUrl || !st.webdavUser || !st.webdavPass) return
+    if (state.profile.lastAutoBackupDay === dayKey() || autoBackupSent.current === dayKey()) return
+    autoBackupSent.current = dayKey()
+    const jobs = webdavUpload({
+      url: st.webdavUrl,
+      user: st.webdavUser,
+      pass: st.webdavPass,
+      content: JSON.stringify(backupPayload(state)),
+      filename: backupFilename(),
+    })
+    jobs.then(() => {
+      dispatch({ type: 'PROFILE_SET', patch: { lastAutoBackupDay: dayKey() } })
+      emit('toast', { icon: '☁️', text: '已自动备份到网盘（含每日留档）' })
+    }).catch(() => { autoBackupSent.current = null }) // 失败不打扰，下次交互再试
+  }, [state, dispatch])
+
   // PWA 安装提示（beforeinstallprompt 只出现一次，保存下来做成手动按钮）
   useEffect(() => {
     const h = (e) => { e.preventDefault(); setInstallEvt(e) }
@@ -134,7 +155,7 @@ export default function App() {
     reward(dispatch, { xp, coins, msg: `专注 ${min} 分钟`, icon: '🍅', confetti: true })
     pomoStartBreak()
     emit('toast', { icon: '☕', text: `休息 ${pomoSnap().total / 60} 分钟，阿咕替你看着钟` })
-  }), [])
+  }), [dispatch]) // dispatch 引用稳定，监听器只注册一次；notify/notifyRef 通过 ref 读取永远是最新的
 
   // 升级检测
   useEffect(() => {
@@ -228,7 +249,7 @@ export default function App() {
 
   // 标签页标题：挂后台也能看出在哪页、番茄钟还剩多久
   const pageRef = useRef(page)
-  pageRef.current = page
+  useEffect(() => { pageRef.current = page }, [page])
   useEffect(() => {
     const pageTitle = () => {
       const p = PAGES.find((x) => x.id === pageRef.current)

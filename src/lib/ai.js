@@ -76,7 +76,7 @@ export async function askAI({ state, input, signal, onDelta }) {
     const data = await res.json()
     const text = data.choices?.[0]?.message?.content || ''
     if (!text) throw new Error('空回复')
-    onDelta && onDelta(text, text)
+    if (onDelta) onDelta(text, text)
     return text.trim()
   }
 
@@ -99,7 +99,7 @@ export async function askAI({ state, input, signal, onDelta }) {
         const delta = JSON.parse(payload).choices?.[0]?.delta?.content || ''
         if (delta) {
           full += delta
-          onDelta && onDelta(delta, full)
+          if (onDelta) onDelta(delta, full)
         }
       } catch { /* 半包/心跳行忽略，下轮 buf 会补全 */ }
     }

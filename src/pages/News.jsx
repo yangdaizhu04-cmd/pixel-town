@@ -23,7 +23,7 @@ export default function News() {
 
   useEffect(() => {
     const stale = !state.news.items.length || Date.now() - state.news.cachedAt > 6 * 3600 * 1000
-    if (stale && !loading) load()
+    if (stale && !loading) load() // eslint-disable-line react/set-state-in-effect -- 进入页面按需拉取新闻，属必要副作用
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const items = state.news.items || []

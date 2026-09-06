@@ -27,7 +27,7 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
   const [davBusy, setDavBusy] = useState('')
 
   useEffect(() => {
-    if (open) {
+    if (open) { // 打开弹窗时同步表单初值（刻意在 effect 里 setState）
       setForm(state.settings)
       setName(state.profile.name)
       setHeight(state.profile.height)
@@ -223,6 +223,10 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
             <Btn color="blue" disabled={!form.webdavUrl || !form.webdavUser || davBusy === 'up'} onClick={davUpload}>{davBusy === 'up' ? '上传中…' : '☁️ 备份到网盘'}</Btn>
             <Btn disabled={!form.webdavUrl || !form.webdavUser || davBusy === 'down'} onClick={davDownload}>{davBusy === 'down' ? '读取中…' : '☁️ 从网盘恢复'}</Btn>
           </div>
+          <label className="check-line">
+            <input type="checkbox" checked={!!form.autoBackup} disabled={!form.webdavUrl || !form.webdavUser} onChange={(e) => setForm({ ...form, autoBackup: e.target.checked })} />
+            <span>☁️ 每天自动备份到网盘（每天首次打开小镇时自动传一份，密钥不入档）</span>
+          </label>
         </section>
 
         <section>

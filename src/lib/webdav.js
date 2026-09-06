@@ -49,3 +49,9 @@ export const backupFilename = () =>
 
 export const datedBackupFilename = () =>
   `pixel-town-backup-${dayKey()}.json`
+
+// 备份内容：剥掉 API Key 与网盘密码，只留可恢复的数据（自动备份与手动导出共用同一口径）
+export const backupPayload = (s) => ({
+  ...s,
+  settings: { ...s.settings, apiKey: '', webdavPass: '' },
+})

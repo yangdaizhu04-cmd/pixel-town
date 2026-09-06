@@ -17,7 +17,7 @@ const LS_KEY = 'pixel-town-save-v1'
 const uid = () => Math.random().toString(36).slice(2, 9)
 
 // ---------- 种子数据（首次打开就是一座有生活气的小镇） ----------
-function seed() {
+export function seed() {
   const t = dayKey()
   const d = (n) => addDays(t, -n)
   // 演示用历史 XP：过去 24 天有起有伏，让热力图第一眼就有「生活感」
@@ -117,6 +117,7 @@ function seed() {
       model: 'deepseek-chat',
       sound: true,
       notify: false,
+      autoBackup: false,
       city: '',
       webdavUrl: '',
       webdavUser: '',
@@ -167,14 +168,15 @@ export function hydrate(parsed) {
       },
     }
   }
-  // 难度字段兜底：旧档/未标的默认「普通」
-  s.todos = (s.todos || []).map((x) => ({ diff: 2, ...x }))
-  s.habits = (s.habits || []).map((x) => ({ diff: 2, ...x }))
+  // 难度/重复字段兜底：旧档/未标的默认值（先展开再兜底，undefined 也被覆盖成默认）
+  s.todos = (s.todos || []).map((x) => ({ ...x, diff: x.diff || 2, repeat: x.repeat || '', lastDone: x.lastDone || '' }))
+  s.habits = (s.habits || []).map((x) => ({ ...x, diff: x.diff || 2 }))
   // 自定义成就 / 愿望货架的字段兜底（旧档没有就先用空数组）
   s.profile.customAch = s.profile.customAch || []
   s.profile.rewards = s.profile.rewards || []
   s.profile.rewardsOwned = s.profile.rewardsOwned || []
   s.profile.rewardsDone = s.profile.rewardsDone || []
+  s.profile.lastAutoBackupDay = s.profile.lastAutoBackupDay || ''
   return s
 }
 
@@ -189,7 +191,7 @@ function load() {
 }
 
 // ---------- Reducer（纯函数：副作用一律走事件总线） ----------
-function reducer(s, a) {
+export function reducer(s, a) {
   const t = dayKey()
   const P = { ...s.profile }
   switch (a.type) {

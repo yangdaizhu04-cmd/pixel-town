@@ -73,7 +73,7 @@ export default function English() {
     }
     const p = pool.length >= 4 ? pool : allWords
     if (p.length < 4) return
-    const word = p[Math.floor(Math.random() * p.length)]
+    const word = p[Math.floor(Math.random() * p.length)] // 随机抽题是刻意行为
     const others = shuffle(allWords.filter((x) => x.w !== word.w)).slice(0, 3)
     setQuiz({ word, options: shuffle([word, ...others]), picked: null, review: false })
     sfx('pop')

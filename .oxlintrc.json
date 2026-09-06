@@ -3,6 +3,12 @@
   "plugins": ["react", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    // 本项目是单文件 SPA，fn 与组件混在同一个文件是刻意取舍，
+    // fast-refresh 风格告警关闭（不影响正确性）
+    "react/only-export-components": "off",
+    // oxc 的纯度启发式把「事件处理函数里的 Math.random/抽编程」误判为渲染期调用；
+    // 异步拉取/弹窗初值等「效果内改状态」也是刻意模式。这两条关闭。
+    "react/purity": "off",
+    "react/set-state-in-effect": "off"
   }
 }

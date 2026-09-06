@@ -23,7 +23,7 @@ export function Btn({ children, onClick, color = '', size = '', disabled, title,
       title={title}
       disabled={disabled}
       className={`btn ${color} ${size} ${className}`}
-      onClick={(e) => { sfx('click'); onClick && onClick(e) }}
+      onClick={(e) => { sfx('click'); if (onClick) onClick(e) }}
     >
       {children}
     </button>

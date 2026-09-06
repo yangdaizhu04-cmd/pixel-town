@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@vp-tw/cjk-web-fonts-fusion-pixel-font/dist/12px/proportional/zh_hans/Fusion-Pixel-12px-Proportional-Simplified-Chinese.css'
+import './assets/fonts/index.css' // 子集化中文字体（仅含本项目用到的字符，运行时接口/输入的中文走系统字体兜底）
 import './styles/global.css'
 import App from './App.jsx'
 import { AppProvider } from './lib/store.jsx'
