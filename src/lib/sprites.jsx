@@ -315,30 +315,31 @@ SPRITES.bloom_sunflower = SPRITES.bloom_sun
 
 // ---- 阿咕 + 帽子：把帽子直接画进鸟的字符画（CSS 绝对定位叠加会错位、出画，实测很丑） ----
 // 帽子占顶部 3 行，与鸟身共用一张 canvas，天然对齐。
+// 对齐基准：鸟头在第 3~8 列（中心 5.5），所有帽子都以这个中心对称，差 1px 就是被说「戴歪」。
 const BIRD_ROWS = SPRITES.bird.rows
 const BIRD_PAL = SPRITES.bird.pal
 function birdWithHat(hatRows) {
   const w = BIRD_ROWS[0].length
   const top = hatRows.map((r) => (r + '.'.repeat(w)).slice(0, w))
   return {
-    pal: { ...BIRD_PAL, G: C.greenD, F: C.red, Y: C.gold },
+    pal: { ...BIRD_PAL, G: C.greenD, F: C.red, Y: C.gold, D: C.goldD, K: C.ink, W: C.white },
     rows: [...top, ...BIRD_ROWS],
   }
 }
 SPRITES.bird_leaf = birdWithHat([
-  '....G....G....',
-  '....GG..GG....',
-  '.....GGGG.....',
+  '...G....G.....',
+  '...GG..GG.....',
+  '....GGGG......',
 ])
 SPRITES.bird_berry = birdWithHat([
-  '.....FFFF.....',
-  '....FFFFFF....',
-  '....FFFFFF....',
+  '....FFFF......',
+  '...FFFFFF.....',
+  '...FWFFFW.....',
 ])
 SPRITES.bird_crown = birdWithHat([
-  '...Y..Y..Y....',
-  '...YYYYYYYY...',
-  '...YYYYYYYY...',
+  '..Y..YY..Y....',
+  '..YYYYYYYY....',
+  '..KYYYYYYK....',
 ])
 // 根据商店帽子 id 返回对应的合成精灵名（没戴/未知 → 光鸟）
 export const birdNameForHat = (hat) => {
