@@ -36,6 +36,8 @@ const PAGES = [
   { id: 'agent', icon: '🐣', label: '小镇精灵', comp: AgentChat },
 ]
 const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-']
+// 移动端底部 Tab 用的短标签
+const SHORT = { home: '首页', todos: '待办', ledger: '账本', habits: '习惯', news: '新闻', study: '学习', english: '英语', weight: '体重', review: '复盘', museum: '年鉴', agent: '阿咕' }
 
 const TIPS = [
   '完成任务会自动给花园浇水，每天第一次手动浇水免费。',
@@ -69,11 +71,52 @@ export default function App() {
   const [page, setPage] = useState('home')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
+  const [installEvt, setInstallEvt] = useState(null)
   const mainRef = useRef(null)
   const levelRef = useRef(state.profile.level)
+  // 触屏滑动切页；通知开关反射（pomo 事件监听器是最早 state 的闭包）
+  const touchX = useRef(null)
+  const notifyRef = useRef(state.settings.notify)
 
   // 音效开关
   useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
+  useEffect(() => { notifyRef.current = state.settings.notify }, [state.settings.notify])
+
+  // PWA 安装提示（beforeinstallprompt 只出现一次，保存下来做成手动按钮）
+  useEffect(() => {
+    const h = (e) => { e.preventDefault(); setInstallEvt(e) }
+    window.addEventListener('beforeinstallprompt', h)
+    return () => window.removeEventListener('beforeinstallprompt', h)
+  }, [])
+
+  const installApp = async () => {
+    if (!installEvt) return
+    installEvt.prompt()
+    await installEvt.userChoice
+    setInstallEvt(null)
+  }
+
+  // 系统通知：只在用户设置里开了开关且授权后才会弹（soft opt-in，绝不主动打扰）
+  const notify = (title, body) => {
+    try {
+      if (notifyRef.current && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body, tag: 'pomo', icon: 'icon.svg' })
+      }
+    } catch { /* 通知不可用时静默 */ }
+  }
+
+  const onTouchStart = (e) => { touchX.current = e.touches[0].clientX }
+  const onTouchEnd = (e) => {
+    if (touchX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchX.current
+    touchX.current = null
+    const tag = (e.target.tagName || '').toLowerCase()
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+    if (Math.abs(dx) < 50) return
+    const i = PAGES.findIndex((p) => p.id === page)
+    const next = dx < 0 ? i + 1 : i - 1
+    if (next >= 0 && next < PAGES.length) { sfx('click'); setPage(PAGES[next].id) }
+  }
 
   // 番茄钟完成：专注轮 → 记时长发奖励并自动接休息轮；休息轮 → 只提醒不奖励（休息不该被 KPI 化）
   useEffect(() => on('pomo-done', ({ detail }) => {
@@ -81,8 +124,10 @@ export default function App() {
     sfx('alarm')
     if (mode === 'break') {
       emit('toast', { icon: '☀️', text: '休息完毕！准备好就开始下一个番茄吧' })
+      notify('休息完毕 ☕', '阿咕提醒你：休息够了，准备好就开始下一个番茄吧')
       return
     }
+    notify('专注完成 🍅', `专注 ${min} 分钟拿下！去休息一下，阿咕替你看着钟`)
     dispatch({ type: 'POMO_DONE', min, planId, h: new Date().getHours() })
     const xp = Math.min(30, Math.max(5, Math.round((min / 30) * 10)))
     const coins = min >= 30 ? 3 : 1
@@ -259,7 +304,7 @@ export default function App() {
           </div>
         </aside>
 
-        <main className="page" ref={mainRef} key={page}>
+        <main className="page" ref={mainRef} key={page} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           {page === 'agent'
             ? <AgentChat onOpenSettings={() => setSettingsOpen(true)} />
             : <Cur />}
@@ -273,10 +318,25 @@ export default function App() {
       )}
       <PomoBadge onGo={() => { sfx('click'); setPage('study') }} />
 
+      {/* 移动端底部导航（窄屏显示） */}
+      <nav className="bottom-nav" aria-label="页面导航">
+        {PAGES.map((p) => (
+          <button
+            key={p.id}
+            className={`nav-item ${page === p.id ? 'active' : ''}`}
+            aria-current={page === p.id ? 'page' : undefined}
+            onClick={() => { if (page !== p.id) { sfx('click'); setPage(p.id) } }}
+          >
+            <span className="nav-icon">{p.icon}</span>
+            <span className="nav-text">{SHORT[p.id]}</span>
+          </button>
+        ))}
+      </nav>
+
       <ToastHost />
       <ConfettiHost />
       <ConfirmHost />
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} installable={!!installEvt} onInstall={installApp} />
       <LevelUpModal level={levelUp} onClose={() => setLevelUp(null)} />
     </div>
   )

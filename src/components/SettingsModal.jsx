@@ -18,7 +18,7 @@ const summarizeSave = (s) => {
   return `Lv.${p.level || '?'} · 金币 ${p.coins ?? '?'} · 连续 ${p.streak ?? '?'} 天 · 待办 ${(s.todos || []).length} 条`
 }
 
-export default function SettingsModal({ open, onClose }) {
+export default function SettingsModal({ open, onClose, installable = false, onInstall }) {
   const { state, dispatch } = useApp()
   const [form, setForm] = useState(state.settings)
   const [name, setName] = useState(state.profile.name)
@@ -136,6 +136,14 @@ export default function SettingsModal({ open, onClose }) {
       ? `上次备份是 ${daysBetween(lastExport, dayKey())} 天前，花 10 秒导出一份吧？`
       : `上次备份：${lastExport}`
 
+  // 樱桃小提醒：用户主动开开关才申请通知权限（soft opt-in）
+  const onNotify = async (v) => {
+    setForm({ ...form, notify: v })
+    if (v && 'Notification' in window && Notification.permission !== 'granted') {
+      try { await Notification.requestPermission() } catch { /* 忽略 */ }
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} title="小镇设置" wide>
       <div className="settings">
@@ -218,12 +226,27 @@ export default function SettingsModal({ open, onClose }) {
         </section>
 
         <section>
-          <h4>🔔 音效</h4>
+          <h4>🔔 音效与系统提醒</h4>
           <label className="check-line">
             <input type="checkbox" checked={form.sound} onChange={(e) => setForm({ ...form, sound: e.target.checked })} />
             <span>打开 8-bit 小音效（完成任务、金币入账时）</span>
           </label>
+          <label className="check-line">
+            <input type="checkbox" checked={!!form.notify} onChange={(e) => onNotify(e.target.checked)} />
+            <span>🍅 番茄钟结束发系统通知（专注/休息结束时提醒你）</span>
+          </label>
+          {'Notification' in window && form.notify && Notification.permission !== 'granted' && (
+            <p className="settings-hint">浏览器还没允许通知——点开开关时已经请求过一次；若被拒，请在浏览器地址栏的「站点设置」里手动允许。</p>
+          )}
         </section>
+
+        {installable && (
+          <section>
+            <h4>📲 装到桌面 / 主屏</h4>
+            <p className="settings-hint">把拾光小镇装成独立窗口运行，跟 App 一样用（还支持离线）。</p>
+            <Btn color="green" onClick={onInstall}>⬇️ 安装拾光小镇</Btn>
+          </section>
+        )}
 
         <section>
           <h4>💾 数据（保存在浏览器本地）</h4>

@@ -12,3 +12,10 @@ createRoot(document.getElementById('root')).render(
     </AppProvider>
   </StrictMode>,
 )
+
+// PWA：仅在 http(s) 下注册 Service Worker（file:// 双击打开时静默跳过，靠 singlefile 兜底）
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}

@@ -10,7 +10,7 @@ npm run dev        # 开发模式，浏览器打开提示的地址（默认 http
 npm run build      # 产物是单个自包含的 dist/index.html（约 1.6MB），双击即可离线打开
 ```
 
-> `npm run build` 用了 `vite-plugin-singlefile`：JS/CSS/字体全部内联进一个 HTML，现代浏览器下**双击 dist/index.html 就能用**，不用起服务器（`<script type="module">` 的 file:// CORS 问题已绕开，详见 [踩坑指南](./踩坑指南.md) 第 13 条）。
+> `npm run build` 用了 `vite-plugin-singlefile`：JS/CSS/字体全部内联进一个 HTML，现代浏览器下**双击 dist/index.html 就能用**，不用起服务器（`<script type="module">` 的 file:// CORS 问题已绕开，详见 [踩坑指南](./踩坑指南.md) 第 13 条）。`dist/` 里还有 `sw.js / manifest.webmanifest / icon.svg`——线上部署后即成为可安装的 PWA；本地 file:// 打开时 SW 静默跳过。
 
 首次打开自带演示数据，所有数据保存在**浏览器 localStorage**（250ms 防抖自动保存）。设置里可以导出 / 导入 JSON 备份（导入前有确认预览）、配置 WebDAV 云备份、重置小镇。存档自带版本号与迁移逻辑，旧档升级无需手动处理。
 
@@ -76,6 +76,7 @@ Windows 下也可以直接**双击「一键上传.bat」**。脚本会自动处�
 - 中文像素字体：缝合像素字体 Fusion Pixel（npm 自托管分片 webfont，离线可用）
 - 所有像素画（植物 6 种、阿咕、礼箱、心情脸、装饰、帽子、奖杯…）都是手绘字符画 + Canvas 渲染，零图片资源
 - 8-bit 音效由 WebAudio 现场合成（可在设置关闭）；单词发音用浏览器自带 speechSynthesis
+- 可安装 PWA（manifest + Service Worker，public/ 输出，线上部署后可装桌面/主屏离线用）+ 番茄钟**系统通知**（设置里开启才申请权限）+ **暗色主题**（跟随 `prefers-color-scheme`）+ 移动端**底部导航**与滑动切页
 
 ## 目录结构
 

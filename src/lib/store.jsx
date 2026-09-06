@@ -116,6 +116,7 @@ function seed() {
       baseUrl: 'https://api.deepseek.com/v1',
       model: 'deepseek-chat',
       sound: true,
+      notify: false,
       city: '',
       webdavUrl: '',
       webdavUser: '',

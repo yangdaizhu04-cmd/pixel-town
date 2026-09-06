@@ -745,3 +745,57 @@ textarea { resize: vertical; width: 100%; }
 .report-chip b { font-size: 15px; }
 .share-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .share-card { box-shadow: 0 -2px 0 0 var(--line), 0 2px 0 0 var(--line), -2px 0 0 0 var(--line), 2px 0 0 0 var(--line); }
+
+/* ---------- v3c：暗色主题（跟随系统） ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sky1: #1c2733;
+    --sky2: #253244;
+    --paper: #23211c;
+    --paper2: #2c2922;
+    --sand: #3b352b;
+    --sand2: #4c4538;
+    --ink: #e8ddc3;
+    --ink2: #a89c82;
+    --line: #8a7a62;
+    --green-pale: #2f3d27;
+    --blue-pale: #223542;
+    --pink-pale: #42303a;
+    --shadow: rgba(0, 0, 0, 0.45);
+  }
+  /* 少量硬编码浅色修正 */
+  body { background: var(--sky2); }
+  .budget-bar { background: #3b352b; }
+  .heat-keys i { box-shadow: 0 -2px 0 0 #4c4538, 0 2px 0 0 #4c4538, -2px 0 0 0 #4c4538, 2px 0 0 0 #4c4538; }
+  input:focus, select:focus, textarea:focus { background: #333027; }
+  .nav-item:hover, .nav-item.active { background: #3b352b; }
+  .modal-x, .del { color: #a89c82; }
+  .prio-flag { color: #6b624f; }
+}
+
+/* ---------- v3c：移动端底部导航 + 悬浮元素避让 ---------- */
+.bottom-nav { display: none; }
+@media (max-width: 620px) {
+  .bottom-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: flex; overflow-x: auto;
+    background: var(--paper2);
+    border-top: 3px solid var(--line);
+    box-shadow: 0 -4px 0 0 var(--shadow);
+    padding: 4px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  .bottom-nav .nav-item {
+    flex: 1 0 auto; min-width: 50px;
+    flex-direction: column; gap: 2px;
+    padding: 5px 6px; font-size: 12px; text-align: center;
+    border-radius: 4px;
+  }
+  .bottom-nav .nav-item:hover { transform: none; }
+  .bottom-nav .nav-item.active { transform: none; background: var(--sand); }
+  .bottom-nav .nav-icon { width: auto; font-size: 18px; }
+  .bottom-nav .nav-text { font-size: 11px; white-space: nowrap; }
+  .app { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
+  /* FAB 和番茄钟徽章让位给底部导航 */
+  .fab { right: 14px; bottom: calc(92px + env(safe-area-inset-bottom)); width: 56px; height: 56px; }
+  .pomo-badge { bottom: calc(92px + env(safe-area-inset-bottom)); }
+}
