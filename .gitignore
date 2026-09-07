@@ -15,6 +15,9 @@ dist-ssr
 # 工具内部状态（安全扫描/会话钩子）
 .mimosa
 
+# 本地 HTTPS 证书（scripts/https-setup.ps1 生成，含私钥，绝不能入库）
+.https
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -12,6 +12,18 @@ npm run build      # 产物是单个自包含的 dist/index.html（约 1.6MB）�
 
 > `npm run build` 用了 `vite-plugin-singlefile`：JS/CSS/字体全部内联进一个 HTML，现代浏览器下**双击 dist/index.html 就能用**，不用起服务器（`<script type="module">` 的 file:// CORS 问题已绕开，详见 [踩坑指南](./踩坑指南.md) 第 13 条）。`dist/` 里还有 `sw.js / manifest.webmanifest / icon.svg`——线上部署后即成为可安装的 PWA；本地 file:// 打开时 SW 静默跳过。
 
+### 本地 HTTPS 用于手机真机安装 PWA
+
+如果想在本机局域网环境让手机体验「添加到主屏」，先运行一键脚本生成证书：
+
+```powershell
+# PowerShell：执行完会生成 .https/cert.pem + key.pem + ca.pem
+# 把 ca.pem 发给手机安装信任（iOS 需要额外开启证书完整信任）
+pwsh scripts/https-setup.ps1  # 或 powershell -ExecutionPolicy Bypass -File scripts/https-setup.ps1
+# 证书已包含 localhost + 本机全部局域网 IP，换网段后重跑脚本即可
+npm run dev  # 检测到 .https/ 自动启用 HTTPS，按提示用局域网 IP 访问即可
+```
+
 首次打开自带演示数据，所有数据保存在**浏览器 localStorage**（250ms 防抖自动保存）。设置里可以导出 / 导入 JSON 备份（导入前有确认预览）、配置 WebDAV 云备份、重置小镇。存档自带版本号与迁移逻辑，旧档升级无需手动处理。
 
 ## 同步到 GitHub
