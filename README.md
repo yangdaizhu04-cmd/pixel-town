@@ -10,6 +10,8 @@ npm run dev        # 开发模式，浏览器打开提示的地址（默认 http
 npm run build      # 产物是单个自包含的 dist/index.html（约 1.6MB），双击即可离线打开
 ```
 
+Windows 下想最快打开应用：双击根目录的 **「一键启动.bat」**——自动选一个空闲端口起 `npm run dev`（`--strictPort` 固定，不会因端口占用跳变；`.https/` 存在时自动走 HTTPS），等服务器就绪后用默认浏览器打开，dev 窗口关掉即停。等效命令 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start-app.ps1`。
+
 > `npm run build` 用了 `vite-plugin-singlefile`：JS/CSS/字体全部内联进一个 HTML，现代浏览器下**双击 dist/index.html 就能用**，不用起服务器（`<script type="module">` 的 file:// CORS 问题已绕开，详见 [踩坑指南](./踩坑指南.md) 第 13 条）。`dist/` 里还有 `sw.js / manifest.webmanifest / icon.svg`——线上部署后即成为可安装的 PWA；本地 file:// 打开时 SW 静默跳过。
 
 ### 本地 HTTPS 用于手机真机安装 PWA
@@ -37,7 +39,7 @@ bash upload.sh 修了XX问题  # 或用自定义提交信息
 
 Windows 下也可以直接**双击「一键上传.bat」**。脚本会自动处理：暂存全部变更、生成提交、推送；远端领先时自动 rebase 重试；没配置 git 身份时自动补默认值。
 
-开发过程中的真实踩坑记录（中文像素字体、GSAP×StrictMode、TDZ 白屏、RSS 存活名单、file:// CORS 等 36 条）见 **[踩坑指南.md](./踩坑指南.md)**。
+开发过程中的真实踩坑记录（中文像素字体、GSAP×StrictMode、TDZ 白屏、RSS 存活名单、file:// CORS 等 37 条）见 **[踩坑指南.md](./踩坑指南.md)**。
 
 ## 功能地图
 
