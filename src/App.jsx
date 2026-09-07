@@ -73,6 +73,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   const [installEvt, setInstallEvt] = useState(null)
+  // 安装引导：android = 浏览器给了 beforeinstallprompt（可一键装）；ios = 只能提示手动「添加到主屏幕」
+  const [installUI, setInstallUI] = useState({ show: false, mode: null })
   const mainRef = useRef(null)
   const levelRef = useRef(state.profile.level)
   // 触屏滑动切页；通知开关反射（pomo 事件监听器是最早 state 的闭包）
@@ -103,18 +105,36 @@ export default function App() {
     }).catch(() => { autoBackupSent.current = null }) // 失败不打扰，下次交互再试
   }, [state, dispatch])
 
-  // PWA 安装提示（beforeinstallprompt 只出现一次，保存下来做成手动按钮）
+  // PWA 安装提示（beforeinstallprompt 只出现一次，保存下来做成手动按钮 + 弹安装引导）
   useEffect(() => {
-    const h = (e) => { e.preventDefault(); setInstallEvt(e) }
+    const h = (e) => { e.preventDefault(); setInstallEvt(e); setInstallUI({ show: true, mode: 'android' }) }
     window.addEventListener('beforeinstallprompt', h)
-    return () => window.removeEventListener('beforeinstallprompt', h)
+    // 安装完成（或浏览器决定不再可安装）→ 关掉引导
+    const done = () => { setInstallEvt(null) }
+    window.addEventListener('appinstalled', done)
+    return () => { window.removeEventListener('beforeinstallprompt', h); window.removeEventListener('appinstalled', done) }
   }, [])
+
+  // 安装引导横幅：已安装 / 用户关过的不再出现；iOS 没有 beforeinstallprompt，延迟几秒给手动指引
+  const dismissBanner = () => {
+    try { localStorage.setItem('pixel-town-install-skip', '1') } catch { /* ignore */ }
+    setInstallUI({ show: false, mode: null })
+  }
+  useEffect(() => {
+    const standalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+    if (standalone()) return
+    try { if (localStorage.getItem('pixel-town-install-skip')) return } catch { /* ignore */ }
+    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '')
+    const t = setTimeout(() => { if (iOS && !installEvt) setInstallUI({ show: true, mode: 'ios' }) }, 4000)
+    return () => clearTimeout(t)
+  }, [installEvt])
 
   const installApp = async () => {
     if (!installEvt) return
     installEvt.prompt()
     await installEvt.userChoice
     setInstallEvt(null)
+    dismissBanner()
   }
 
   // 系统通知：只在用户设置里开了开关且授权后才会弹（soft opt-in，绝不主动打扰）
@@ -338,6 +358,20 @@ export default function App() {
         </button>
       )}
       <PomoBadge onGo={() => { sfx('click'); setPage('study') }} />
+
+      {/* 安装引导：可一键安装时给按钮，iOS 只给手动指引；可关闭、装过/关过不再出现 */}
+      {installUI.show && (
+        <div className="install-banner" role="note" aria-label="安装提示">
+          <span className="install-banner-icon">{installUI.mode === 'android' ? '📱' : '🧭'}</span>
+          <p className="install-banner-text">
+            {installUI.mode === 'android'
+              ? '把小城镇装进手机桌面，离线也能打开～'
+              : '想当 App 用？点浏览器分享按钮，选「添加到主屏幕」～'}
+          </p>
+          {installUI.mode === 'android' && <Btn size="sm" color="green" onClick={installApp}>安装 App</Btn>}
+          <button className="install-banner-x" aria-label="关闭安装提示" onClick={dismissBanner}>×</button>
+        </div>
+      )}
 
       {/* 移动端底部导航（窄屏显示） */}
       <nav className="bottom-nav" aria-label="页面导航">
