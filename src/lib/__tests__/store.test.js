@@ -126,6 +126,35 @@ describe('reducer：GRANT 升级与连续', () => {
   })
 })
 
+describe('跨天修正：今天的进度只属于今天', () => {
+  it('hydrate 遇到 xpTodayDay 是昨天 → 今日 XP 归零并翻到今天（全面检查抓过的 bug）', () => {
+    const old = { ...seed(), xpToday: 99, xpTodayDay: addDays(dayKey(), -1) }
+    const s = hydrate(JSON.parse(JSON.stringify(old)))
+    expect(s.xpToday).toBe(0)
+    expect(s.xpTodayDay).toBe(dayKey())
+  })
+
+  it('hydrate 当日数据不误清零', () => {
+    const t = dayKey()
+    const same = hydrate({ ...seed(), xpToday: 55, xpTodayDay: t })
+    expect(same.xpToday).toBe(55)
+    expect(same.xpTodayDay).toBe(t)
+  })
+})
+
+describe('IMPORT：恢复备份不清空已配密钥', () => {
+  it('备份（backupPayload 已剥密钥）导入后，apiKey/webdavPass 保留当前配置', () => {
+    const cur = {
+      ...seed(),
+      settings: { ...seed().settings, apiKey: 'sk-current', webdavPass: 'pw-current', webdavUrl: 'https://dav.example/dav/' },
+    }
+    const backup = backupPayload(cur) // apiKey / webdavPass 已被剥空
+    const r = reducer(cur, { type: 'IMPORT', state: backup })
+    expect(r.settings.apiKey).toBe('sk-current')
+    expect(r.settings.webdavPass).toBe('pw-current')
+  })
+})
+
 describe('webdav：备份内容剥离密钥', () => {
   it('backupPayload 剥掉 apiKey 与 webdavPass，保留其余数据', () => {
     const base = seed()

@@ -1,11 +1,10 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../lib/store.jsx'
 import { Panel, Btn, Bar, Chip } from '../components/ui.jsx'
 import { REWARDS, reward, sfx, emit } from '../lib/gamify.js'
 import { gsap, D, useGSAP } from '../lib/anim.js'
 import { speak } from '../lib/tts.js'
 import { WORDS } from '../lib/words.js'
-import { useRef } from 'react'
 import { dayKey, daysBetween } from '../lib/dates.js'
 
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5)
@@ -28,6 +27,8 @@ export default function English() {
   const [quiz, setQuiz] = useState(null) // {word, options, picked, review}
   const [importText, setImportText] = useState('')
   const cardRef = useRef(null)
+  const quizTimer = useRef(null) // 答对/答错后的「自动下一题」延迟，切页/切模式时清理，避免残留回调覆盖新 quiz
+  useEffect(() => () => { if (quizTimer.current) clearTimeout(quizTimer.current) }, [])
   const eng = state.english
   const custom = useMemo(() => state.english.custom || [], [state.english.custom])
   const t = dayKey()
@@ -87,20 +88,20 @@ export default function English() {
     if (correct) {
       sfx('coin')
       reward(dispatch, { ...REWARDS.english, msg: `答对 ${quiz.word.w}${quiz.review ? '（复习）' : ''}`, icon: '🎉' })
-      setTimeout(newQuiz, 1100)
+      quizTimer.current = setTimeout(newQuiz, 1100)
     } else {
       sfx('oops')
       emit('toast', { icon: '📝', text: `正确答案是「${quiz.word.zh}」，已加入生词本` })
-      setTimeout(newQuiz, 1600)
+      quizTimer.current = setTimeout(newQuiz, 1600)
     }
   }
 
   const doImport = () => {
     const lines = importText.split('\n').map((x) => x.trim()).filter(Boolean)
-    // 与内置词也查重：否则词库出现两个同名条目，测验会给出两个一模一样的选项
-    const builtin = new Set(WORDS.map((x) => x.w))
+    // 与内置词查重 + 粘贴内容内部去重：否则词库出现两个同名条目，测验会给出两个一模一样的选项、列表出现重复 key
+    const seen = new Set(WORDS.map((x) => x.w))
     const parsed = lines.map(parseWordLine).filter(Boolean)
-    const words = parsed.filter((x) => !builtin.has(x.w))
+    const words = parsed.filter((x) => { if (seen.has(x.w)) return false; seen.add(x.w); return true })
     const skipped = lines.length - words.length
     if (!words.length) {
       emit('toast', { icon: '📥', text: '没有收下新单词（格式不对，或都是已有词）' })

@@ -64,12 +64,17 @@ export async function fetchWeatherByGeo() {
   } catch { /* ignore */ }
 
   if (lat == null) {
-    const pos = await new Promise((resolve, reject) => {
-      if (!navigator.geolocation) { reject(new Error('NO_GEO')); return }
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000, maximumAge: 10 * 60 * 1000 })
-    })
-    lat = pos.coords.latitude
-    lon = pos.coords.longitude
+    // 用户拒绝授权 / 定位超时会 reject：必须吞掉返回 null，由调用方回退「小镇预言」（否则逃逸成 unhandledrejection）
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        if (!navigator.geolocation) { reject(new Error('NO_GEO')); return }
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000, maximumAge: 10 * 60 * 1000 })
+      })
+      lat = pos.coords.latitude
+      lon = pos.coords.longitude
+    } catch {
+      return null
+    }
     try { localStorage.setItem(GEO_KEY, JSON.stringify({ at: Date.now(), lat, lon })) } catch { /* ignore */ }
   }
 

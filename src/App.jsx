@@ -316,7 +316,7 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-right">
-          <Chip className="lv" title={`距下一级还差 ${need - profile.xp} XP`}>Lv.{profile.level} <em className="lv-xp">{profile.xp}/{need} XP</em></Chip>
+          <Chip className="lv" title={`距下一级还差 ${Math.max(0, need - profile.xp)} XP`}>Lv.{profile.level} <em className="lv-xp">{profile.xp}/{need} XP</em></Chip>
           <Chip className="wallet" title="金币：完成任务赚，商店和浇水花">🪙 {profile.coins}</Chip>
           <Btn size="sm" title="设置" onClick={() => setSettingsOpen(true)}>⚙️</Btn>
         </div>

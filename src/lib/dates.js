@@ -22,11 +22,6 @@ export const fmtLong = (k) => {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 · 星期${WEEKDAYS[d.getDay()]}`
 }
 
-export const seasonOf = (k = dayKey()) => {
-  const m = parseKey(k).getMonth()
-  return `${['冬', '冬', '春', '春', '春', '夏', '夏', '夏', '秋', '秋', '秋', '冬'][m]}月`
-}
-
 export const greeting = () => {
   const h = new Date().getHours()
   if (h < 6) return '夜深了'

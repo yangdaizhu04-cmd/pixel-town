@@ -23,7 +23,18 @@ export default function News() {
 
   useEffect(() => {
     const stale = !state.news.items.length || Date.now() - state.news.cachedAt > 6 * 3600 * 1000
-    if (stale && !loading) load() // eslint-disable-line react/set-state-in-effect -- 进入页面按需拉取新闻，属必要副作用
+    if (!stale || loading) return
+    // alive 守卫：拉取期间切走（组件卸载）后不再 setState / 不把旧请求结果覆盖回来（竞态防护）
+    let alive = true
+    ;(async () => {
+      const r = await fetchNews(false)
+      if (!alive) return
+      dispatch({ type: 'NEWS_SET', items: r.items, cachedAt: r.cachedAt, source: r.source })
+      setLoading(false)
+      if (r.source === 'live') emit('toast', { icon: '📰', text: `小信鸽带回了 ${r.items.length} 条新鲜资讯` })
+      if (r.source === 'fallback') emit('toast', { icon: '🕊️', text: '新闻源暂时够不着，上了一份内置精选' })
+    })()
+    return () => { alive = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const items = state.news.items || []

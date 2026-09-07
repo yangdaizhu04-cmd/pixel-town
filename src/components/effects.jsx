@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { gsap, D } from '../lib/anim.js'
-import { on, emitConfetti, sfx } from '../lib/gamify.js'
+import { on, emitConfetti } from '../lib/gamify.js'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { Modal, Btn } from './ui.jsx'
 
@@ -80,5 +80,3 @@ export function LevelUpModal({ level, onClose }) {
     </Modal>
   )
 }
-
-export { sfx }

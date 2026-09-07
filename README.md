@@ -37,7 +37,7 @@ bash upload.sh 修了XX问题  # 或用自定义提交信息
 
 Windows 下也可以直接**双击「一键上传.bat」**。脚本会自动处理：暂存全部变更、生成提交、推送；远端领先时自动 rebase 重试；没配置 git 身份时自动补默认值。
 
-开发过程中的真实踩坑记录（中文像素字体、GSAP×StrictMode、TDZ 白屏、RSS 存活名单、file:// CORS 等 21 条）见 **[踩坑指南.md](./踩坑指南.md)**。
+开发过程中的真实踩坑记录（中文像素字体、GSAP×StrictMode、TDZ 白屏、RSS 存活名单、file:// CORS 等 36 条）见 **[踩坑指南.md](./踩坑指南.md)**。
 
 ## 功能地图
 

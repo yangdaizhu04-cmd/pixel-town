@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { dayKey, addDays, monthKey, daysBetween } from './dates.js'
 import { xpNeeded } from './gamify.js'
 import { WORDS } from './words.js'
@@ -177,6 +177,12 @@ export function hydrate(parsed) {
   s.profile.rewardsOwned = s.profile.rewardsOwned || []
   s.profile.rewardsDone = s.profile.rewardsDone || []
   s.profile.lastAutoBackupDay = s.profile.lastAutoBackupDay || ''
+  // 跨天修正：今日 XP / 礼箱按天重置。GRANT 分支也会重置，但「跨天首次打开页面、当天还没任何奖励动作」时，
+  // 必须在这里就纠正——否则首页会把昨天的 XP 当成今天的展示（进度满但礼箱全可开，状态自相矛盾）。
+  if (s.xpTodayDay !== dayKey()) {
+    s.xpToday = 0
+    s.xpTodayDay = dayKey()
+  }
   return s
 }
 
@@ -492,7 +498,15 @@ export function reducer(s, a) {
 
     case 'EXPORT_MARK':
       return { ...s, profile: { ...P, lastExportDay: t } }
-    case 'IMPORT': return hydrate(a.state)
+    case 'IMPORT': {
+      // 备份刻意剥掉了 apiKey / webdavPass（见 webdav.backupPayload，防文件泄露）；
+      // 导入时若备份里这两项为空，保留当前配置——否则恢复一次备份就把已配好的密钥清空了
+      const cur = s.settings
+      const next = hydrate(a.state)
+      if (!(next.settings.apiKey || '').trim()) next.settings.apiKey = cur.apiKey
+      if (!(next.settings.webdavPass || '').trim()) next.settings.webdavPass = cur.webdavPass
+      return next
+    }
     case 'RESET': return seed()
     default: return s
   }
@@ -503,13 +517,26 @@ const Ctx = createContext(null)
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, load)
   const timer = useRef(null)
+  const stateRef = useRef(state) // 全局兜底保存用的最新 state（beforeunload 监听只注册一次，读 ref 不闭包过期值）
+  const saveNow = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(stateRef.current)) } catch { /* 存储满时忽略 */ } }
   useEffect(() => {
+    stateRef.current = state
     clearTimeout(timer.current)
-    timer.current = setTimeout(() => {
-      try { localStorage.setItem(LS_KEY, JSON.stringify(state)) } catch { /* 存储满时忽略 */ }
-    }, 250)
+    timer.current = setTimeout(saveNow, 250)
     return () => clearTimeout(timer.current)
   }, [state])
+  // 卸载 / 切后台兜底：防抖窗口内（操作后 250ms）刷新或关页也不丢最后一步
+  useEffect(() => {
+    const flush = () => saveNow()
+    const onVis = () => { if (document.visibilityState === 'hidden') flush() }
+    window.addEventListener('beforeunload', flush)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      document.removeEventListener('visibilitychange', onVis)
+      clearTimeout(timer.current)
+    }
+  }, [])
   const value = useMemo(() => ({ state, dispatch }), [state])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -561,5 +588,3 @@ export const bmiOf = (s) => {
   const h = s.profile.height / 100
   return +(w.kg / (h * h)).toFixed(1)
 }
-
-export { monthKey }
