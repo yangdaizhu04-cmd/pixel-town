@@ -242,9 +242,10 @@ export function reducer(s, a) {
     case 'WATER': {
       if ((a.cost || 0) > P.coins) return s
       const pots = P.pots.map((x) => ({ ...x }))
-      const target = [...pots].filter((x) => x.kind).sort((x, y) => x.pts - y.pts)[0]
-      const grown = target && target.pts < BLOOM_PTS
-      if (target && grown) {
+      // 指定 potId 只浇那一盆；否则自动挑最缺水（pts 最低）的一盆；已盛开的盆不再被浇
+      const growers = pots.filter((x) => x.kind && x.pts < BLOOM_PTS)
+      const target = a.potId ? growers.find((x) => x.id === a.potId) : growers.sort((x, y) => x.pts - y.pts)[0]
+      if (target) {
         target.pts += 1
         if (target.pts >= BLOOM_PTS && !(P.collection || []).includes(target.kind)) {
           P.collection = [...(P.collection || []), target.kind]
@@ -254,7 +255,7 @@ export function reducer(s, a) {
       P.waterTotal = (P.waterTotal || 0) + 1
       P.waterLastDay = t
       P.coins -= a.cost || 0
-      return { ...s, profile: P, justGrew: grown ? target.id : null }
+      return { ...s, profile: P, justGrew: target ? target.id : null }
     }
 
     // ---------- 商店 ----------

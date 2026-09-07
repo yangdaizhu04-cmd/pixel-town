@@ -93,12 +93,28 @@ export default function Dashboard() {
     gsap.to('.plant-sprite', { rotation: 2.5, yoyo: true, repeat: -1, duration: 1.6, ease: 'sine.inOut', transformOrigin: '50% 90%' })
   }, { scope: rootRef })
 
-  const water = () => {
-    // 空花园不浇水：没有种植物的盆时直接提醒，避免白花金币
-    if (!state.profile.pots.some((x) => x.kind)) {
-      emit('toast', { icon: '🪴', text: '花园里还没有植物，先在空盆里种下种子吧～' })
-      sfx('oops')
-      return
+  const water = (potId) => {
+    // 指定盆的校验：空盆 / 已盛开的盆不能浇
+    if (potId) {
+      const pot = state.profile.pots.find((x) => x.id === potId)
+      if (!pot?.kind) {
+        emit('toast', { icon: '🪴', text: '这个盆还是空的，先种下种子吧～' })
+        sfx('oops')
+        return
+      }
+      if (pot.pts >= BLOOM_PTS) {
+        emit('toast', { icon: '🌼', text: '这株已经盛开啦，采集种子换金币吧' })
+        sfx('oops')
+        return
+      }
+    } else {
+      // 自动浇最缺水的一盆；没有可浇的植物时提醒，避免白花金币
+      const growers = state.profile.pots.filter((x) => x.kind && x.pts < BLOOM_PTS)
+      if (!growers.length) {
+        emit('toast', { icon: '🪴', text: state.profile.pots.some((x) => x.kind) ? '小植物们都盛开啦，采集种子腾个盆吧～' : '花园里还没有植物，先在空盆里种下种子吧～' })
+        sfx('oops')
+        return
+      }
     }
     const cost = freeWater ? 0 : WATER_COST
     if (cost > state.profile.coins) {
@@ -106,8 +122,10 @@ export default function Dashboard() {
       sfx('oops')
       return
     }
-    const before = [...state.profile.pots].filter((x) => x.kind).sort((a, b) => a.pts - b.pts)[0]
-    dispatch({ type: 'WATER', cost })
+    const before = potId
+      ? state.profile.pots.find((x) => x.id === potId)
+      : [...state.profile.pots].filter((x) => x.kind && x.pts < BLOOM_PTS).sort((a, b) => a.pts - b.pts)[0]
+    dispatch({ type: 'WATER', cost, potId })
     sfx('water')
     if (before) {
       const el = document.getElementById(`pot-${before.id}`)
@@ -116,7 +134,8 @@ export default function Dashboard() {
         gsap.fromTo(el, { y: 4 }, { y: 0, duration: D(0.4), ease: 'back.out(2.5)', delay: D(0.3) })
       }
     }
-    emit('toast', { icon: '💧', text: cost ? `花 ${WATER_COST} 金币浇了一次水` : '今天第一次浇水，免费！' })
+    const who = before ? `给${plantName(before.kind)}` : ''
+    emit('toast', { icon: '💧', text: cost ? `花 ${WATER_COST} 金币${who}浇了一次水` : `今天第一次浇水${who}，免费！` })
   }
 
   const harvest = (pot) => {
@@ -248,7 +267,10 @@ export default function Dashboard() {
                     <span className="pot-next">
                       {bloomed ? '盛开啦！' : `再浇 ${next} 次开花`}
                     </span>
-                    {bloomed && <Btn size="sm" color="gold" onClick={() => harvest(pot)}>🌼 采集种子 +6🪙</Btn>}
+                    <div className="pot-actions">
+                      {!bloomed && <Btn size="sm" color="blue" onClick={() => water(pot.id)}>💧 浇水</Btn>}
+                      {bloomed && <Btn size="sm" color="gold" onClick={() => harvest(pot)}>🌼 采集种子 +6🪙</Btn>}
+                    </div>
                   </>
                 )}
               </div>
@@ -267,7 +289,7 @@ export default function Dashboard() {
           </span>
           <div className="btn-row">
             <Btn onClick={() => { setShopOpen(true); sfx('click') }}>🛒 小镇商店</Btn>
-            <Btn color="blue" onClick={water}>🪣 浇水壶</Btn>
+            <Btn color="blue" onClick={() => water()}>🪣 浇水壶</Btn>
           </div>
         </div>
       </Panel>

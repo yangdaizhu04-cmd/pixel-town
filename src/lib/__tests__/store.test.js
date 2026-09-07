@@ -126,6 +126,54 @@ describe('reducer：GRANT 升级与连续', () => {
   })
 })
 
+describe('reducer：WATER 按盆浇水', () => {
+  const growerState = () => ({
+    ...seed(),
+    profile: {
+      ...seed().profile,
+      coins: 100,
+      waterLastDay: dayKey(), // 今天已免费浇过 → 本次收费，避免免费逻辑干扰
+      pots: [
+        { id: 'p1', kind: 'sunflower', pts: 1 },
+        { id: 'p2', kind: 'tulip', pts: 4 },
+      ],
+    },
+  })
+
+  it('指定 potId 只浇那一盆，其他盆不涨', () => {
+    const r = reducer(growerState(), { type: 'WATER', cost: 2, potId: 'p2' })
+    expect(r.profile.pots.find((x) => x.id === 'p1').pts).toBe(1)
+    expect(r.profile.pots.find((x) => x.id === 'p2').pts).toBe(5)
+    expect(r.justGrew).toBe('p2')
+    expect(r.profile.coins).toBe(98)
+  })
+
+  it('不传 potId 自动浇最缺水的一盆', () => {
+    const r = reducer(growerState(), { type: 'WATER', cost: 0 })
+    expect(r.profile.pots.find((x) => x.id === 'p1').pts).toBe(2)
+    expect(r.profile.pots.find((x) => x.id === 'p2').pts).toBe(4)
+    expect(r.justGrew).toBe('p1')
+  })
+
+  it('已盛开的盆不会被打湿，waterTotal 与扣费仍正常', () => {
+    const base = {
+      ...growerState(),
+      profile: {
+        ...growerState().profile,
+        pots: [
+          { id: 'p1', kind: 'sunflower', pts: 14 }, // 已盛开
+          { id: 'p2', kind: 'tulip', pts: 14 },     // 已盛开
+        ],
+      },
+    }
+    const r = reducer(base, { type: 'WATER', cost: 2, potId: 'p1' })
+    expect(r.profile.pots.find((x) => x.id === 'p1').pts).toBe(14) // 不开花不涨
+    expect(r.justGrew).toBe(null)
+    expect(r.profile.waterTotal).toBe(base.profile.waterTotal + 1)
+    expect(r.profile.coins).toBe(98)
+  })
+})
+
 describe('跨天修正：今天的进度只属于今天', () => {
   it('hydrate 遇到 xpTodayDay 是昨天 → 今日 XP 归零并翻到今天（全面检查抓过的 bug）', () => {
     const old = { ...seed(), xpToday: 99, xpTodayDay: addDays(dayKey(), -1) }
