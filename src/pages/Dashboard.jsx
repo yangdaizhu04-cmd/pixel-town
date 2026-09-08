@@ -10,6 +10,7 @@ import { MILESTONES, XP_GOAL, WATER_COST, emit, sfx, emitConfetti } from '../lib
 import { MAX_POTS, PLANT_META, plantName } from '../lib/shop.js'
 import { useGSAP, gsap, D } from '../lib/anim.js'
 import { greeting, fmtLong, pickByDay, dayKey } from '../lib/dates.js'
+import { challengeOf } from '../lib/challenges.js'
 import { fetchWeatherByCity, fetchWeatherByGeo } from '../lib/weather.js'
 
 const WEATHERS = [
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const wx = weather || pickByDay(WEATHERS, 'wx')
   const claimed = state.claimed[dayKey()] || []
   const freeWater = state.profile.waterLastDay !== dayKey()
+  const ch = challengeOf(state)
 
   useEffect(() => {
     if (!wxKey) return
@@ -228,6 +230,18 @@ export default function Dashboard() {
           })}
         </div>
       </Panel>
+
+      {ch && (
+        <Panel title="本周挑战" icon={ch.icon}>
+          <div className="challenge-row">
+            <div className="challenge-info">
+              <b>{ch.claimed ? `「${ch.name}」达成！` : `「${ch.name}」：${ch.desc}`}</b>
+              <span className="muted">{ch.claimed ? '奖励已入账，下周还有新挑战 🎉' : `当前 ${Math.min(ch.cur, ch.max)} / ${ch.max} ${ch.unit} · 达成 +${ch.coins} 金币`}</span>
+            </div>
+            <Bar pct={ch.claimed ? 100 : (ch.cur / ch.max) * 100} color={ch.claimed ? 'gold' : 'green'} className="challenge-bar" />
+          </div>
+        </Panel>
+      )}
 
       <Panel
         title="我的成长植物园" icon="🌻"

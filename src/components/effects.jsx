@@ -13,7 +13,7 @@ export function ToastHost() {
     const id = Math.random().toString(36).slice(2)
     setItems((l) => [...l.slice(-3), { id, ...e.detail }])
   }), [])
-  return <div className="toasts">{items.map((t) => <Toast key={t.id} t={t} onDone={() => setItems((l) => l.filter((x) => x.id !== t.id))} />)}</div>
+  return <div className="toasts" role="status" aria-live="polite">{items.map((t) => <Toast key={t.id} t={t} onDone={() => setItems((l) => l.filter((x) => x.id !== t.id))} />)}</div>
 }
 
 function Toast({ t, onDone }) {

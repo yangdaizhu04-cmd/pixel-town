@@ -150,6 +150,21 @@ const SPRITES = {
       'llllllllllll',
     ],
   },
+  // 专注墙的小番茄（红果 + 绿蒂）
+  tomato: {
+    pal: V({ g: C.greenD, r: C.red, d: C.redD }),
+    rows: [
+      '...gg...',
+      '...gg...',
+      '..rrrr..',
+      '.rdddrd.',
+      'rdddddrd',
+      'rdddddrd',
+      'rdddddrd',
+      '.rdddrd.',
+      '..rrrr..',
+    ],
+  },
   // ---- 小镇精灵「阿咕」 ----
   bird: {
     pal: V({ b: '#ffe08a', w: '#fff6dd', o: C.orange, e: C.ink, c: '#e8b04f' }),

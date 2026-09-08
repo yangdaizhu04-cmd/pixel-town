@@ -47,6 +47,14 @@ function stopLoop() {
   if (timer) { clearInterval(timer); timer = null }
 }
 
+// 后台标签页会节流 setInterval（Chrome 节能甚至完全暂停），回到前台/重获焦点时立刻校准一次，
+// 否则专注结束的提醒可能迟到几分钟
+if (typeof document !== 'undefined') {
+  const catchUp = () => { if (document.hidden === false) tick() }
+  document.addEventListener('visibilitychange', catchUp)
+  window.addEventListener('pageshow', () => tick())
+}
+
 export function pomoSubscribe(f) {
   subs.add(f)
   return () => subs.delete(f)

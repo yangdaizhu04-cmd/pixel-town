@@ -6,6 +6,41 @@ import { ACHIEVEMENTS, ACH_METRICS, metricOf, customValue, customDesc } from '..
 import { PLANT_META } from '../lib/shop.js'
 import { sfx, emit } from '../lib/gamify.js'
 import { dayKey, addDays, parseKey, fmtShort, fmtLong, lastNDays } from '../lib/dates.js'
+import { weeklyReport } from '../lib/weekly.js'
+
+// 环比小箭头：正/负/持平
+const Delta = ({ v, unit = '' }) =>
+  v > 0 ? <span className="w-diff up">↗ {v}{unit}</span>
+    : v < 0 ? <span className="w-diff down">↘ {Math.abs(v)}{unit}</span>
+      : <span className="w-diff">—</span>
+
+// ---------- 上周小镇周报 ----------
+function WeeklyReport({ state }) {
+  const r = weeklyReport(state)
+  const w = r.thisWeek
+  const cells = [
+    { icon: '📝', label: '完成待办', value: `${w.todos} 件`, d: r.diff.todos, unit: '' },
+    { icon: '✅', label: '习惯点亮', value: `${w.habits} 次`, d: r.diff.habits, unit: '' },
+    { icon: '🍅', label: '专注时长', value: `${w.focusMin} 分钟`, d: r.diff.focusMin, unit: 'm' },
+    { icon: '🧾', label: '记一笔账', value: `${w.ledger} 笔`, d: r.diff.ledger, unit: '' },
+    { icon: '🌙', label: '晚间复盘', value: `${w.reviews} 篇`, d: r.diff.reviews, unit: '' },
+    { icon: '💰', label: '本周收入', value: `¥${w.income}`, d: w.income - r.lastWeek.income, unit: '' },
+    { icon: '💸', label: '本周支出', value: `¥${w.expense}`, d: w.expense - r.lastWeek.expense, unit: '' },
+    { icon: '⭐', label: '小镇热度', value: `${w.xp} XP`, d: r.diff.xp, unit: '' },
+  ]
+  return (
+    <div className="week-stats">
+      {cells.map((c) => (
+        <div key={c.label} className="week-stat">
+          <span className="ws-icon">{c.icon}</span>
+          <b>{c.value}</b>
+          <span className="ws-label">{c.label}</span>
+          <Delta v={c.d} unit={c.unit} />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 // ---------- XP 热力图（26 周，GitHub 贡献图的小镇版） ----------
 const HEAT = ['#efe3c4', '#cfe8b8', '#a8d78d', '#79b851', '#ffd34e']
@@ -56,6 +91,39 @@ function Heatmap({ xpLog }) {
         </span>
       </div>
     </div>
+  )
+}
+
+// ---------- 专注番茄田（每完成一个番茄钟，墙里就多一颗番茄） ----------
+function PomoWall({ state }) {
+  const log = state.pomoLog || []
+  const days = lastNDays(28)
+  const byDay = {}
+  for (const p of log) { (byDay[p.t] ||= []).push(p) }
+  const totalMin = log.reduce((m, p) => m + (p.min || 0), 0)
+  const hours = Math.round((totalMin / 60) * 10) / 10
+
+  if (!log.length) {
+    return <Empty icon="🍅">还没种下番茄。去「学习计划」页开始一段专注，完成后这里会长出第一颗。</Empty>
+  }
+  return (
+    <>
+      <div className="pomo-wall">
+        {days.map((d) => {
+          const list = byDay[d]
+          const n = list ? Math.min(list.length, 5) : 0
+          const more = list ? list.length - n : 0
+          return (
+            <div key={d} className={`pw-cell ${list ? 'on' : ''}`} title={list ? `${fmtShort(d)} · ${list.length} 颗番茄` : fmtShort(d)}>
+              {Array.from({ length: n }, (_, i) => <PixelSprite key={i} name="tomato" scale={1} />)}
+              {list && more > 0 && <span className="pw-n">+{more}</span>}
+              {!list && <span className="pw-n">·</span>}
+            </div>
+          )
+        })}
+      </div>
+      <p className="muted">一格是一天：累计 {log.length} 颗番茄 · 约 {hours} 小时专注。种满 50 颗会解锁成就「番茄田」哦。</p>
+    </>
   )
 }
 
@@ -296,6 +364,7 @@ export default function Museum() {
   const { state, dispatch } = useApp()
   const [achOpen, setAchOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const r = weeklyReport(state)
   const totalXp = Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0)
   const customAch = state.profile.customAch || []
   const achCount = Object.keys(state.profile.achievements || {}).length
@@ -318,6 +387,16 @@ export default function Museum() {
   return (
     <>
       <Panel
+        title="上周小镇周报" icon="🗞️"
+        extra={<span className="xp-pill">本周 {r.days[0].slice(5).replace('-', '/')} 起</span>}
+      >
+        <div className="week-stats-wrap">
+          <WeeklyReport state={state} />
+          <p className="muted">自动生成的本周小结，箭头是和上周比（↗ 变好 / ↘ 变少）。过去 7 天的努力都算数。</p>
+        </div>
+      </Panel>
+
+      <Panel
         title="小镇半年鉴" icon="🗺️"
         extra={
           <div className="btn-row">
@@ -328,6 +407,13 @@ export default function Museum() {
       >
         <p className="muted">每一格是一天：颜色越亮，那天的小镇越热闹。金色是冲破 90 XP 的日子！</p>
         <Heatmap xpLog={state.xpLog} />
+      </Panel>
+
+      <Panel
+        title="专注番茄田" icon="🍅"
+        extra={<span className="xp-pill">累计 {state.profile.stats?.pomos || 0} 颗</span>}
+      >
+        <PomoWall state={state} />
       </Panel>
 
       <Panel

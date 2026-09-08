@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { dayKey, addDays, monthKey, daysBetween } from './dates.js'
-import { xpNeeded } from './gamify.js'
+import { xpNeeded, emit } from './gamify.js'
 import { WORDS } from './words.js'
 
 // ---------- 植物生长 ----------
@@ -53,9 +53,11 @@ export function seed() {
       rewardsDone: [],
       weightGoal: null,
       lastExportDay: '',
+      weekly: { week: '', id: '', claimed: false }, // 每周小挑战：week 是本周一 key，id 挑战模板，claimed 本周是否已领奖
       stats: { todosDone: 12, ledger: 12, pomos: 0 },
     },
     xpLog,
+    pomoLog: [], // 每次专注完成记一条 { t, min, h, planId }，供「专注墙」收集展示（最多保留 200 条）
     xpToday: 55,
     xpTodayDay: t,
     claimed: { [t]: [] },
@@ -177,12 +179,19 @@ export function hydrate(parsed) {
   s.profile.rewardsOwned = s.profile.rewardsOwned || []
   s.profile.rewardsDone = s.profile.rewardsDone || []
   s.profile.lastAutoBackupDay = s.profile.lastAutoBackupDay || ''
+  s.profile.weekly = s.profile.weekly || { week: '', id: '', claimed: false }
+  // 专注墙数据兜底：只保留结构合法的条目（脏条目会踩出 q.w 之类 TypeError）
+  s.pomoLog = (s.pomoLog || []).filter((p) => p && p.t && typeof p.min === 'number')
   // 跨天修正：今日 XP / 礼箱按天重置。GRANT 分支也会重置，但「跨天首次打开页面、当天还没任何奖励动作」时，
   // 必须在这里就纠正——否则首页会把昨天的 XP 当成今天的展示（进度满但礼箱全可开，状态自相矛盾）。
   if (s.xpTodayDay !== dayKey()) {
     s.xpToday = 0
     s.xpTodayDay = dayKey()
   }
+  // 生词本健康检查：任何版本档都可能混入脏条目（如手工编辑/第三方导入），一律踢掉并补全必填字段
+  s.english.queue = (s.english.queue || [])
+    .filter((q) => q && typeof q === 'object' && typeof q.w === 'string' && q.w)
+    .map((q) => ({ ...q, interval: q.interval || 0, due: q.due || dayKey() }))
   return s
 }
 
@@ -420,13 +429,16 @@ export function reducer(s, a) {
       }
     case 'STUDY_DEL':
       return { ...s, study: s.study.filter((p) => p.id !== a.id) }
-    // 番茄钟完成：可挂在学习计划上，也可以只是自由专注
+    // 番茄钟完成：可挂在学习计划上，也可以只是自由专注；每次完成都记一条「专注墙」条目
     case 'POMO_DONE': {
       const NP = { ...P, stats: { ...P.stats, pomos: (P.stats?.pomos || 0) + 1 } }
-      if (!a.planId) return { ...s, profile: NP }
+      const pok = { t, min: Math.round(a.min) || 0, h: a.h ?? new Date().getHours(), planId: a.planId || '' }
+      const pomoLog = [...(s.pomoLog || []), pok].slice(-200)
+      if (!a.planId) return { ...s, profile: NP, pomoLog }
       return {
         ...s,
         profile: NP,
+        pomoLog,
         study: s.study.map((p) => (p.id === a.planId
           ? { ...p, sessions: [...p.sessions, { day: t, min: a.min, note: a.note || '🍅 番茄钟', h: a.h ?? null }] }
           : p)),
@@ -499,6 +511,14 @@ export function reducer(s, a) {
 
     case 'EXPORT_MARK':
       return { ...s, profile: { ...P, lastExportDay: t } }
+    // 每周小挑战达成：发金币并标记本周已领（roll 挑战本身由 App 层做；已领则幂等忽略）
+    case 'CHALLENGE_CLAIM': {
+      if (P.weekly?.claimed) return s
+      return {
+        ...s,
+        profile: { ...P, coins: P.coins + (a.coins || 0), weekly: { ...(P.weekly || { week: '', id: '', claimed: false }), claimed: true } },
+      }
+    }
     case 'IMPORT': {
       // 备份刻意剥掉了 apiKey / webdavPass（见 webdav.backupPayload，防文件泄露）；
       // 导入时若备份里这两项为空，保留当前配置——否则恢复一次备份就把已配好的密钥清空了
@@ -519,7 +539,13 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, load)
   const timer = useRef(null)
   const stateRef = useRef(state) // 全局兜底保存用的最新 state（beforeunload 监听只注册一次，读 ref 不闭包过期值）
-  const saveNow = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(stateRef.current)) } catch { /* 存储满时忽略 */ } }
+  const saveNow = () => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(stateRef.current)) }
+    catch {
+      // 存储满 / 隐私模式被拒时静默会让人「不知不觉丢数据」，必须明说
+      emit('toast', { icon: '⚠️', text: '本地存档空间满了，这次改动没能存下来，请尽快导出备份或精简数据' })
+    }
+  }
   useEffect(() => {
     stateRef.current = state
     clearTimeout(timer.current)

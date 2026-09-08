@@ -42,7 +42,7 @@ body {
   font-size: 16px;
   line-height: 1.55;
   color: var(--ink);
-  background: linear-gradient(180deg, var(--sky1) 0%, var(--sky2) 60%, #e8f7ef 100%);
+  background: linear-gradient(180deg, var(--sky1) 0%, var(--sky2) 60%, var(--sky3) 100%);
   background-attachment: fixed;
   min-height: 100vh;
 }
@@ -764,6 +764,58 @@ textarea { resize: vertical; width: 100%; }
 .share-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .share-card { box-shadow: 0 -2px 0 0 var(--line), 0 2px 0 0 var(--line), -2px 0 0 0 var(--line), 2px 0 0 0 var(--line); }
 
+/* ---------- v3e：周报 / 专注番茄田 / 本周挑战 / 阿咕闪现 / 新手引导 ---------- */
+.week-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+.week-stat { background: var(--paper2); border: 2px solid var(--line); border-radius: 4px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.week-stat b { font-size: 20px; line-height: 1.2; }
+.ws-icon { font-size: 16px; }
+.ws-label { font-size: 12px; color: var(--ink2); }
+.w-diff { font-size: 12px; color: var(--ink2); }
+.w-diff.up { color: var(--green-d); }
+.w-diff.down { color: var(--red-d); }
+
+.pomo-wall { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.pw-cell { min-height: 36px; background: var(--paper2); border: 2px solid var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; gap: 2px; flex-wrap: wrap; padding: 3px 2px; }
+.pw-cell.on { background: #fff0e6; }
+.pw-n { font-size: 10px; color: var(--ink2); line-height: 1; }
+
+.challenge-row { display: flex; flex-direction: column; gap: 8px; }
+.challenge-info { display: flex; flex-direction: column; gap: 2px; }
+.challenge-bar { margin-top: 2px; }
+
+.agu-visit { position: fixed; left: 14px; bottom: 96px; z-index: 60; display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0; cursor: pointer; }
+.agu-visit-bird { animation: bob 1.6s ease-in-out infinite; }
+.agu-visit-bubble { background: var(--paper2); border: 3px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px; max-width: 230px; text-align: left; box-shadow: 0 4px 0 0 var(--shadow); }
+
+.intro-overlay { position: fixed; inset: 0; z-index: 400; background: rgba(74, 59, 42, 0.4); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.intro { max-width: 400px; width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 0; }
+.intro h2 { font-size: 22px; text-shadow: 2px 2px 0 var(--sand2); }
+.intro p { color: var(--ink2); font-size: 14px; }
+.intro-dots { display: flex; gap: 6px; }
+.intro-dots i { width: 9px; height: 9px; background: var(--sand2); border-radius: 2px; }
+.intro-dots i.on { background: var(--green); }
+
+@media (max-width: 620px) {
+  .week-stats { grid-template-columns: repeat(2, 1fr); }
+  .pomo-wall { grid-template-columns: repeat(7, 1fr); }
+  .agu-visit { bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
+
+/* ---------- v3d：小镇昼夜（body[data-period] 由 App 按时段设置，天会随钟点变） ---------- */
+body[data-period='dawn'] { --sky1: #8fd0d8; --sky2: #ffeec9; --sky3: #ecf6dd; }
+body[data-period='dusk'] { --sky1: #f59d6d; --sky2: #ffd3a8; --sky3: #f0e3c8; }
+body[data-period='night'] { --sky1: #20274a; --sky2: #343e6b; --sky3: #24304f; }
+body[data-period='night'] .hill.h1 { background: #3d4a68; }
+body[data-period='night'] .hill.h2 { background: #4a5878; }
+body[data-period='night'] .hill.h3 { background: #354262; }
+body[data-period='night'] .cloud { opacity: 0.35; }
+body[data-period='dusk'] .hill.h1 { background: #d9a489; }
+body[data-period='dusk'] .hill.h2 { background: #e0b594; }
+body[data-period='dusk'] .hill.h3 { background: #c8957a; }
+body[data-period='dawn'] .hill.h1 { background: #a3c993; }
+body[data-period='dawn'] .hill.h2 { background: #b7d5a2; }
+body[data-period='dawn'] .hill.h3 { background: #8fc07f; }
+
 /* ---------- v3c：暗色主题（跟随系统） ---------- */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -781,6 +833,12 @@ textarea { resize: vertical; width: 100%; }
     --pink-pale: #42303a;
     --shadow: rgba(0, 0, 0, 0.45);
   }
+  /* 暗色主题里昼夜色调收敛成各自的暗色（不能残留亮色时段变量） */
+  :root { --sky3: #253244; }
+  body[data-period='dawn'] { --sky1: #2b2f40; --sky2: #34384b; --sky3: #383c52; }
+  body[data-period='day'] { --sky1: #1c2733; --sky2: #253244; --sky3: #253244; }
+  body[data-period='dusk'] { --sky1: #332c3c; --sky2: #3b3148; --sky3: #38303e; }
+  body[data-period='night'] { --sky1: #141926; --sky2: #1d2436; --sky3: #151b2b; }
   /* 少量硬编码浅色修正 */
   body { background: var(--sky2); }
   .budget-bar { background: #3b352b; }

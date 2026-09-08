@@ -15,6 +15,8 @@ export const ACHIEVEMENTS = [
   { id: 'level-10', icon: '🗼', name: '十级镇民', desc: '升到 Lv.10', coins: 25, check: (s) => s.profile.level >= 10 },
   { id: 'water-100', icon: '💧', name: '百次浇灌', desc: '花园被浇灌 100 次', coins: 15, check: (s) => (s.profile.waterTotal || 0) >= 100 },
   { id: 'pomo-10', icon: '⏰', name: '十个番茄', desc: '完成 10 个番茄钟', coins: 15, check: (s) => (s.profile.stats?.pomos || 0) >= 10 },
+  { id: 'pomo-50', icon: '🍅', name: '番茄田', desc: '累计完成 50 个番茄钟，专注墙种满一片田', coins: 25, check: (s) => (s.profile.stats?.pomos || 0) >= 50 },
+  { id: 'pomo-night', icon: '🌌', name: '夜猫子', desc: '在 21 点后完成一次专注', coins: 10, check: (s) => (s.pomoLog || []).some((p) => p.h >= 21 || p.h < 4) },
 ]
 
 // ---------- 自定义成就（计数型指标从现有数据里选） ----------

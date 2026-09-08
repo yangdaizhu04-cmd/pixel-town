@@ -31,8 +31,22 @@ export const greeting = () => {
   return '晚上好'
 }
 
+// 小镇时段：清晨 / 白天 / 黄昏 / 夜晚（驱动 body[data-period] 换天）
+export const timeOfDay = () => {
+  const h = new Date().getHours()
+  if (h < 6) return 'night'
+  if (h < 8) return 'dawn'
+  if (h < 17) return 'day'
+  if (h < 19) return 'dusk'
+  return 'night'
+}
+
 export const daysBetween = (a, b) =>
   Math.round((parseKey(b).getTime() - parseKey(a).getTime()) / 86400000)
+
+// end 所在周的周一（周一是这一周的第一天）
+export const weekKey = (end = dayKey()) =>
+  addDays(end, -((parseKey(end).getDay() + 6) % 7))
 
 // 稳定的伪随机（同一 key 每天结果一致），用于每日天气/语录
 export const hashOf = (str) => {

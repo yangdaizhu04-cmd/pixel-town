@@ -203,6 +203,46 @@ describe('IMPORT：恢复备份不清空已配密钥', () => {
   })
 })
 
+describe('reducer：番茄专注墙 + 周挑战', () => {
+  it('POMO_DONE 记录一条专注墙条目，超过 200 条自动裁剪', () => {
+    let s = seed()
+    s = reducer(s, { type: 'POMO_DONE', min: 25, planId: '', h: 21 })
+    expect(s.pomoLog).toHaveLength(1)
+    expect(s.pomoLog[0]).toMatchObject({ min: 25, h: 21, planId: '' })
+    for (let i = 0; i < 205; i++) s = reducer(s, { type: 'POMO_DONE', min: 25, planId: '', h: 10 })
+    expect(s.pomoLog.length).toBeLessThanOrEqual(200)
+  })
+
+  it('hydrate 踢掉结构脏的 pomoLog 条目与生词本 null 条目', () => {
+    const dirty = {
+      ...seed(),
+      pomoLog: [null, { t: 'x' }, { t: '2026-09-07', min: 25 }],
+      english: { ...seed().english, queue: [null, 'plain', { w: '', interval: 1 }, { w: 'ok', interval: 2, due: '2026-09-07' }] },
+    }
+    const s = hydrate(JSON.parse(JSON.stringify(dirty)))
+    expect(s.pomoLog).toEqual([{ t: '2026-09-07', min: 25 }])
+    expect(s.english.queue).toEqual([{ w: 'ok', interval: 2, due: '2026-09-07' }])
+  })
+
+  it('CHALLENGE_CLAIM 发金币并标记本周已领，重复领取不再给钱', () => {
+    let s = seed()
+    s = reducer(s, { type: 'CHALLENGE_CLAIM', coins: 10 })
+    expect(s.profile.weekly.claimed).toBe(true)
+    expect(s.profile.coins).toBe(seed().profile.coins + 10)
+    const before = s.profile.coins
+    s = reducer(s, { type: 'CHALLENGE_CLAIM', coins: 10 })
+    expect(s.profile.coins).toBe(before)
+  })
+
+  it('旧档没有 weekly / pomoLog 也能 hydrate 兜底', () => {
+    const old = { ...seed(), profile: { ...seed().profile, weekly: undefined } }
+    delete old.pomoLog
+    const s = hydrate(old)
+    expect(s.profile.weekly).toEqual({ week: '', id: '', claimed: false })
+    expect(s.pomoLog).toEqual([])
+  })
+})
+
 describe('webdav：备份内容剥离密钥', () => {
   it('backupPayload 剥掉 apiKey 与 webdavPass，保留其余数据', () => {
     const base = seed()

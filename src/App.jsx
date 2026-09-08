@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useApp } from './lib/store.jsx'
 import { gsap, useGSAP, D } from './lib/anim.js'
-import { sfx, setMuted, xpNeeded, emit, on, reward } from './lib/gamify.js'
+import { sfx, setMuted, xpNeeded, emit, on, reward, emitConfetti } from './lib/gamify.js'
+import { CHALLENGES, challengeById, challengeNow } from './lib/challenges.js'
 import { PixelSprite } from './lib/sprites.jsx'
 import { Chip, Btn, Bar, ConfirmHost } from './components/ui.jsx'
 import { ToastHost, ConfettiHost, LevelUpModal } from './components/effects.jsx'
@@ -10,7 +11,7 @@ import { pomoSubscribe, pomoStartBreak, pomoSnap } from './lib/pomo.js'
 import { webdavUpload, backupFilename, backupPayload } from './lib/webdav.js'
 import { ACHIEVEMENTS } from './lib/achievements.js'
 import { PLANT_META } from './lib/shop.js'
-import { dayKey, pickByDay, daysBetween } from './lib/dates.js'
+import { dayKey, addDays, pickByDay, daysBetween, timeOfDay, weekKey } from './lib/dates.js'
 import Dashboard from './pages/Dashboard.jsx'
 import Todos from './pages/Todos.jsx'
 import Ledger from './pages/Ledger.jsx'
@@ -22,6 +23,8 @@ import Weight from './pages/Weight.jsx'
 import Review from './pages/Review.jsx'
 import Museum from './pages/Museum.jsx'
 import AgentChat, { BirdAvatar } from './components/AgentChat.jsx'
+import AguVisit from './components/AguVisit.jsx'
+import IntroOverlay from './components/IntroOverlay.jsx'
 
 const PAGES = [
   { id: 'home', icon: '🏠', label: '首页总览', comp: Dashboard },
@@ -73,6 +76,14 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   const [installEvt, setInstallEvt] = useState(null)
+  // 首次启动引导：只在没标记过时弹一次（localStorage 记忆）
+  const [showIntro, setShowIntro] = useState(() => {
+    try { return !localStorage.getItem('pixel-town-seen-intro') } catch { return true }
+  })
+  const closeIntro = () => {
+    try { localStorage.setItem('pixel-town-seen-intro', '1') } catch { /* ignore */ }
+    setShowIntro(false)
+  }
   // 安装引导：android = 浏览器给了 beforeinstallprompt（可一键装）；ios = 只能提示手动「添加到主屏幕」
   const [installUI, setInstallUI] = useState({ show: false, mode: null })
   const mainRef = useRef(null)
@@ -84,6 +95,14 @@ export default function App() {
   // 音效开关
   useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
   useEffect(() => { notifyRef.current = state.settings.notify }, [state.settings.notify])
+
+  // 小镇昼夜：按时段在 body 上打 data-period，天随钟点变（每天只重算分钟级，不需要 React 渲染）
+  useEffect(() => {
+    const apply = () => { document.body.dataset.period = timeOfDay() }
+    apply()
+    const t = setInterval(apply, 60000)
+    return () => { clearInterval(t); delete document.body.dataset.period }
+  }, [])
 
   // WebDAV 自动备份：设置了地址且打开开关后，每天首次访问自动传一份（密钥不入档）
   const autoBackupSent = useRef(null)
@@ -204,6 +223,30 @@ export default function App() {
         sfx('coin')
         emit('toast', { icon: '🏆', text: `解锁成就「${c.name}」！+${c.coins} 金币` })
       }
+    }
+  }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 每周挑战：周一自动换一个（不重复上周）；本周达成后自动发金币
+  useEffect(() => {
+    const wk = weekKey()
+    const w = state.profile.weekly || {}
+    if (w.week === wk && w.id) return
+    const prevId = w.week === addDays(wk, -7) ? w.id : ''
+    const pool = CHALLENGES.filter((c) => c.id !== prevId)
+    const ch = pool[Math.floor(Math.random() * pool.length)]
+    dispatch({ type: 'PROFILE_SET', patch: { weekly: { week: wk, id: ch.id, claimed: false } } })
+  }, [state.profile.weekly]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const w = state.profile.weekly || {}
+    if (!w.id || w.claimed || w.week !== weekKey()) return
+    const ch = challengeById(w.id)
+    if (ch && challengeNow(ch, state) >= ch.max) {
+      dispatch({ type: 'CHALLENGE_CLAIM', coins: ch.coins })
+      sfx('levelup')
+      emitConfetti(30)
+      emit('toast', { icon: ch.icon, text: `本周挑战「${ch.name}」达成！+${ch.coins} 金币` })
+      notify(`本周挑战达成 🎉`, `「${ch.name}」完成，${ch.coins} 金币已入库`)
     }
   }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -353,11 +396,12 @@ export default function App() {
       </div>
 
       {page !== 'agent' && (
-        <button className="fab" title="和阿咕聊聊" onClick={() => { sfx('pop'); setPage('agent') }}>
+        <button className="fab" title="和阿咕聊聊" aria-label="和阿咕聊聊" onClick={() => { sfx('pop'); setPage('agent') }}>
           <BirdAvatar scale={3} />
         </button>
       )}
       <PomoBadge onGo={() => { sfx('click'); setPage('study') }} />
+      {page !== 'agent' && <AguVisit onGoChat={() => { sfx('pop'); setPage('agent') }} />}
 
       {/* 安装引导：可一键安装时给按钮，iOS 只给手动指引；可关闭、装过/关过不再出现 */}
       {installUI.show && (
@@ -391,6 +435,7 @@ export default function App() {
       <ToastHost />
       <ConfettiHost />
       <ConfirmHost />
+      {showIntro && <IntroOverlay onDone={closeIntro} />}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} installable={!!installEvt} onInstall={installApp} />
       <LevelUpModal level={levelUp} onClose={() => setLevelUp(null)} />
     </div>
