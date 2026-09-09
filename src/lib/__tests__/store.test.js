@@ -96,7 +96,8 @@ describe('reducer：自定义成就与愿望货架', () => {
   })
 
   it('REWARD_ADD → SHOP_BUY 只能买一次 → REWARD_REDEEM / REWARD_DEL', () => {
-    let s = seed()
+    // 空白开局钱包为 0，先准备金币再测试购买
+    let s = reducer(seed(), { type: 'PROFILE_SET', patch: { coins: 100 } })
     s = reducer(s, { type: 'REWARD_ADD', name: '看一场电影', cost: 20 })
     const id = s.profile.rewards[0].id
     const base = s.profile.coins

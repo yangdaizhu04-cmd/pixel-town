@@ -123,7 +123,7 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
 
   const reset = async () => {
     if (!danger) { setDanger(true); return }
-    const ok = await confirmBox({ title: '重置小镇', message: '所有记录都会清空并恢复演示数据，确定要重来吗？', danger: true, okText: '清空重来' })
+    const ok = await confirmBox({ title: '重置小镇', message: '所有记录都会清空，小镇回到最初的空样子（金币、等级、账本、待办全部归零），确定要重来吗？', danger: true, okText: '清空重来' })
     if (!ok) { setDanger(false); return }
     dispatch({ type: 'RESET' })
     onClose()

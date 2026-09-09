@@ -16,35 +16,33 @@ export const stageOf = (pts) => {
 const LS_KEY = 'pixel-town-save-v1'
 const uid = () => Math.random().toString(36).slice(2, 9)
 
-// ---------- 种子数据（首次打开就是一座有生活气的小镇） ----------
+// ---------- 种子数据（首次打开是一座干净的空小镇；所有记录都靠自己动手，没有演示假数据） ----------
+// 曾经这里预置过全套演示数据（演示账目/待办/习惯/体重/复盘等），造成「没记过却有数据、删了又回」的困惑
+//（见踩坑指南）。删除后任何被清空/损坏/换端口都会回落 seed() 重新生成——这正是演示数据反复出现的根因。
 export function seed() {
   const t = dayKey()
-  const d = (n) => addDays(t, -n)
-  // 演示用历史 XP：过去 24 天有起有伏，让热力图第一眼就有「生活感」
-  const xpLog = {}
-  const pattern = [40, 66, 0, 125, 88, 30, 52, 0, 95, 130, 45, 10, 70, 25, 0, 110, 60, 35, 85, 15, 55, 100, 20, 75]
-  pattern.forEach((v, i) => { xpLog[d(pattern.length - i)] = v })
   return {
     v: 2,
     profile: {
       name: '小镇居民',
       height: 170,
-      level: 3,
-      xp: 35,
-      coins: 128,
-      streak: 4,
-      lastActiveDay: d(1),
-      waterTotal: 23,
-      waterLastDay: d(2),
+      level: 1,
+      xp: 0,
+      coins: 0,
+      streak: 0,
+      lastActiveDay: '',
+      waterTotal: 0,
+      waterLastDay: '',
       // v2 花盆：id 只是盆位，kind 才是植物品种；kind 为空 = 空盆
       pots: [
-        { id: 'pot-1', kind: 'sunflower', pts: 10 },
-        { id: 'pot-2', kind: 'tulip', pts: 6 },
-        { id: 'pot-3', kind: 'berry', pts: 2 },
+        { id: 'pot-1', kind: '', pts: 0 },
+        { id: 'pot-2', kind: '', pts: 0 },
+        { id: 'pot-3', kind: '', pts: 0 },
       ],
+      // 三种基础种子免费领养：空白开局也能立刻种下第一株，其余品种去商店解锁
       unlockedKinds: ['sunflower', 'tulip', 'berry'],
-      collection: ['sunflower'],
-      decor: ['fence'],
+      collection: [],
+      decor: [],
       hat: '',
       achievements: {},
       customAch: [],
@@ -54,61 +52,22 @@ export function seed() {
       weightGoal: null,
       lastExportDay: '',
       weekly: { week: '', id: '', claimed: false }, // 每周小挑战：week 是本周一 key，id 挑战模板，claimed 本周是否已领奖
-      stats: { todosDone: 12, ledger: 12, pomos: 0 },
+      stats: { todosDone: 0, ledger: 0, pomos: 0 },
     },
-    xpLog,
+    xpLog: {}, // 每日 XP 记录（热力图数据源），从自己第一次行动才慢慢亮起来
     pomoLog: [], // 每次专注完成记一条 { t, min, h, planId }，供「专注墙」收集展示（最多保留 200 条）
-    xpToday: 55,
+    xpToday: 0,
     xpTodayDay: t,
-    claimed: { [t]: [] },
+    claimed: {},
     budgets: {},
-    todos: [
-      { id: uid(), text: '给小镇写一封本周小结', cat: '工作', prio: true, done: false, day: t, repeat: '' },
-      { id: uid(), text: '伸展 5 分钟，看看窗外的云', cat: '生活', prio: false, done: false, day: t, repeat: '', diff: 1 },
-      { id: uid(), text: '把明天要用的资料打印好', cat: '工作', prio: false, done: false, day: addDays(t, 1), repeat: '' },
-      { id: uid(), text: '读完《深度工作》第 3 章', cat: '学习', prio: false, done: true, day: t, repeat: '', diff: 3 },
-      { id: uid(), text: '回复合作邮件', cat: '工作', prio: false, done: true, day: d(1), repeat: '' },
-      { id: uid(), text: '睡前把明天的水杯装满', cat: '生活', prio: false, done: false, day: t, repeat: 'daily', lastDone: '' },
-      { id: uid(), text: '给阿咕的小花园拍张照', cat: '生活', prio: false, done: false, day: t, repeat: 'weekly', lastDone: '' },
-    ],
-    ledger: [
-      { id: uid(), day: t, type: 'out', amount: 25, cat: '餐饮', note: '晚饭·食堂' },
-      { id: uid(), day: d(1), type: 'out', amount: 199, cat: '学习', note: '网课季度卡' },
-      { id: uid(), day: d(1), type: 'out', amount: 18, cat: '餐饮', note: '咖啡' },
-      { id: uid(), day: d(2), type: 'in', amount: 60, cat: '其他', note: '卖闲置书' },
-      { id: uid(), day: d(2), type: 'out', amount: 45, cat: '娱乐', note: '电影票' },
-      { id: uid(), day: d(3), type: 'out', amount: 45, cat: '购物', note: '新的马克笔' },
-      { id: uid(), day: d(4), type: 'out', amount: 38, cat: '餐饮', note: '和朋友吃拉面' },
-      { id: uid(), day: d(4), type: 'out', amount: 50, cat: '交通', note: '地铁卡充值' },
-      { id: uid(), day: d(5), type: 'out', amount: 9, cat: '餐饮', note: '早餐煎饼' },
-      { id: uid(), day: d(5), type: 'in', amount: 8500, cat: '工资', note: '工资到账' },
-      { id: uid(), day: d(7), type: 'out', amount: 76, cat: '生活', note: '水电费' },
-      { id: uid(), day: d(9), type: 'out', amount: 120, cat: '娱乐', note: '桌游一局' },
-    ],
-    habits: [
-      { id: uid(), name: '喝够 8 杯水', icon: '💧', color: 'blue', days: { [d(4)]: 1, [d(3)]: 1, [d(2)]: 1, [d(1)]: 1, [t]: 1 }, diff: 1 },
-      { id: uid(), name: '拉伸 10 分钟', icon: '🧘', color: 'pink', days: { [d(3)]: 1, [d(2)]: 1, [t]: 1 } },
-      { id: uid(), name: '23:30 前睡觉', icon: '🛏️', color: 'orange', days: { [d(2)]: 1, [d(1)]: 1 }, diff: 3 },
-      { id: uid(), name: '读 20 页书', icon: '📖', color: 'green', days: { [d(1)]: 1 } },
-    ],
-    study: [
-      {
-        id: uid(), title: 'React 通关小课', targetH: 12, deadline: addDays(t, 20),
-        sessions: [{ day: d(3), min: 60, note: 'Hooks 章节' }, { day: d(2), min: 45, note: '' }, { day: d(1), min: 90, note: '练习项目' }, { day: t, min: 75, note: '状态管理' }],
-      },
-      {
-        id: uid(), title: '英语听力磨耳朵', targetH: 8, deadline: addDays(t, 35),
-        sessions: [{ day: d(4), min: 30, note: '' }, { day: d(2), min: 45, note: '播客' }, { day: d(1), min: 75, note: '' }],
-      },
-    ],
+    todos: [],
+    ledger: [],
+    habits: [],
+    study: [],
     // v2 生词本：queue 从 string 升级为 { w, due, interval }（简化间隔重复）
     english: { known: [], queue: [], right: 0, wrong: 0, custom: [] },
-    weights: [64.2, 64.1, 64.3, 64.0, 63.9, 64.0, 63.8, 63.9, 63.7, 63.6, 63.7, 63.5, 63.6, 63.4, 63.3]
-      .map((kg, i) => ({ day: d(14 - i), kg })),
-    reviews: {
-      [d(1)]: { mood: 1, good: '把房间彻底收拾了一遍，书桌终于能摊开了。', thanks: '同事帮我带了咖啡。', tomorrow: '早上先做最重要的一件事。' },
-      [d(2)]: { mood: 0, good: '跑了 3 公里，虽然慢但完成了。', thanks: '晚上地铁有座位。', tomorrow: '早点睡。' },
-    },
+    weights: [],
+    reviews: {},
     news: { cachedAt: 0, items: [], source: '' },
     chat: [
       { role: 'assistant', content: '咕咕！我是阿咕，小镇的管家精灵 🐣\n可以问我「今天还剩几件事」「这个月花了多少」，或者直接说「帮我记一条待办：明天交报告」～' },
