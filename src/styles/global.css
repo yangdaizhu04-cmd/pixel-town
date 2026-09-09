@@ -565,6 +565,11 @@ textarea { resize: vertical; width: 100%; }
 .check-line input { width: 18px; height: 18px; accent-color: var(--green); }
 .import-label { position: relative; overflow: hidden; }
 .import-label input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.backup-guide { margin-top: 12px; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px 8px; background: rgba(255, 211, 78, 0.07); }
+.backup-guide b { font-size: 13px; color: var(--ink); }
+.backup-guide ol { margin: 6px 0 2px; padding-left: 18px; font-size: 13px; color: var(--ink2); line-height: 1.8; }
+.backup-guide code { background: rgba(0, 0, 0, 0.06); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+.backup-guide .settings-hint { margin: 6px 0 0; }
 
 .empty { text-align: center; padding: 26px 10px; color: var(--ink2); font-size: 14px; }
 .empty-icon { font-size: 30px; display: block; margin-bottom: 8px; }

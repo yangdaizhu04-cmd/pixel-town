@@ -255,7 +255,7 @@ export default function App() {
     const last = state.profile.lastExportDay
     if (!last || daysBetween(last, dayKey()) >= 7) {
       const timer = setTimeout(() => {
-        emit('toast', { icon: '💾', text: '好久没备份小镇啦，设置里可以导出或云备份' })
+        emit('toast', { icon: '💾', text: '很久没备份啦，去设置「导出备份」放进坚果云同步文件夹，防丢还有云端一份' })
       }, 2500)
       return () => clearTimeout(timer)
     }

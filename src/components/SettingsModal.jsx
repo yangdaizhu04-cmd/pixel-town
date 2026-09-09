@@ -56,7 +56,7 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
     a.click()
     URL.revokeObjectURL(url)
     dispatch({ type: 'EXPORT_MARK' })
-    emit('toast', { icon: '💾', text: '备份已导出（不含任何密钥），记得存进网盘或手机里' })
+    emit('toast', { icon: '💾', text: '备份已下载（不含密钥），放进坚果云同步文件夹，云端就自动有一份' })
   }
 
   // 导入前先预览存档摘要，确认后才覆盖（旧版是直接覆盖，误选文件会丢数据）
@@ -263,6 +263,17 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
             </label>
             <Btn color="red" onClick={reset}>{danger ? '再点一次确认清空！' : '重置小镇'}</Btn>
           </div>
+          {!lastExport && (
+            <div className="backup-guide">
+              <b>🎯 备份三步走（手动导出 + 坚果云同步）</b>
+              <ol>
+                <li>点上面的「导出备份」，浏览器下载一个 JSON 备份文件</li>
+                <li>把文件移动 / 保存进 <b>坚果云同步文件夹</b>（如 <code>D:\Nutstore\我的坚果云</code>），云端自动多一份</li>
+                <li>换设备时点「导入备份」选中这个文件，两边的数据就接上了</li>
+              </ol>
+              <p className="settings-hint">完成一次后，以后每周点一次「导出备份」放进同一文件夹即可，坚果云会自动覆盖成最新版。</p>
+            </div>
+          )}
         </section>
       </div>
       <div className="modal-foot">
