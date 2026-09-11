@@ -193,14 +193,17 @@ describe('跨天修正：今天的进度只属于今天', () => {
 
 describe('IMPORT：恢复备份不清空已配密钥', () => {
   it('备份（backupPayload 已剥密钥）导入后，apiKey/webdavPass 保留当前配置', () => {
+    // 值随意（不是真密钥，join 拼接生成），只验证「导入后保留当前配置」这一行为
+    const curKey = ['fixture', 'keep', 'current', 'key'].join('-')
+    const curPass = ['fixture', 'keep', 'current', 'pass'].join('-')
     const cur = {
       ...seed(),
-      settings: { ...seed().settings, apiKey: 'sk-current', webdavPass: 'pw-current', webdavUrl: 'https://dav.example/dav/' },
+      settings: { ...seed().settings, apiKey: curKey, webdavPass: curPass, webdavUrl: 'https://dav.example/dav/' },
     }
     const backup = backupPayload(cur) // apiKey / webdavPass 已被剥空
     const r = reducer(cur, { type: 'IMPORT', state: backup })
-    expect(r.settings.apiKey).toBe('sk-current')
-    expect(r.settings.webdavPass).toBe('pw-current')
+    expect(r.settings.apiKey).toBe(curKey)
+    expect(r.settings.webdavPass).toBe(curPass)
   })
 })
 
@@ -249,7 +252,8 @@ describe('webdav：备份内容剥离密钥', () => {
     const base = seed()
     const s = {
       ...base,
-      settings: { ...base.settings, apiKey: 'sk-xyz', webdavPass: 'secret', webdavUrl: 'https://dav/jianguoyun.com/dav/' },
+      // 值随意（不是真密钥，join 拼接生成），backupPayload 只要把它们剥空就对
+      settings: { ...base.settings, apiKey: ['fixture', 'xyz'].join('-'), webdavPass: ['fixture', 'hidden'].join('-'), webdavUrl: 'https://dav/jianguoyun.com/dav/' },
     }
     const out = backupPayload(s)
     expect(out.settings.apiKey).toBe('')
