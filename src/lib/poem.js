@@ -70,10 +70,20 @@ function writeCache(day, data) {
 
 const fallbackOf = (day) => POEMS_FALLBACK[hashOf(day + SALT) % POEMS_FALLBACK.length]
 
+// in-flight 去重：React StrictMode 会「挂载→清理→重挂载」，同一瞬间可能并发两次调用，
+// 用按天共享同一个 Promise 保证同一天只发一次网络请求（踩坑 47）。
+const inflight = new Map()
+
 export async function fetchPoem(day = dayKey()) {
   const cached = readCache(day)
   if (cached) return { ...cached, source: 'cache' }
+  if (inflight.has(day)) return inflight.get(day)
+  const p = doFetch(day).finally(() => inflight.delete(day))
+  inflight.set(day, p)
+  return p
+}
 
+async function doFetch(day) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 9000)
   try {

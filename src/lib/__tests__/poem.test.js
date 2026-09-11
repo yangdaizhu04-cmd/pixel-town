@@ -39,6 +39,18 @@ describe('fetchPoem 每日诗词', () => {
     expect(b.text).toBe(a.text)
   })
 
+  it('并发调用同一天只发一次网络请求（StrictMode 双挂载场景）', async () => {
+    let resolveFetch
+    const fetchMock = vi.fn().mockImplementation(() => new Promise((res) => { resolveFetch = () => res({ ok: true, json: async () => LIVE }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    const aP = fetchPoem('2026-09-16')
+    const bP = fetchPoem('2026-09-16')
+    resolveFetch()
+    const [a, b] = await Promise.all([aP, bP])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(a).toEqual(b)
+  })
+
   it('跨天重新拉取并换新', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => LIVE })
     vi.stubGlobal('fetch', fetchMock)

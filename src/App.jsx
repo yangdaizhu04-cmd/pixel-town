@@ -77,9 +77,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   const [installEvt, setInstallEvt] = useState(null)
-  // 每日诗词（今日题词）：poem.js 内部按日期缓存，这里只负责把首次结果接进来
+  // 每日诗词（今日题词）：poem.js 内部按日期缓存 + in-flight 去重，这里只负责把结果接进来
   const [poem, setPoem] = useState(null)
-  const poemLoadedDay = useRef(null)
   // 首次启动引导：只在没标记过时弹一次（localStorage 记忆）
   const [showIntro, setShowIntro] = useState(() => {
     try { return !localStorage.getItem('pixel-town-seen-intro') } catch { return true }
@@ -128,13 +127,10 @@ export default function App() {
     }).catch(() => { autoBackupSent.current = null }) // 失败不打扰，下次交互再试
   }, [state, dispatch])
 
-  // 每日诗词：应用层面只挂载一次；跨天重新打开页面时会再拉一次（内部缓存按天换新）
+  // 每日诗词：首屏拉一次即可（poem.js 内部按日缓存 + in-flight 去重，跨天重新挂载会自动换新）
   useEffect(() => {
-    const d = dayKey()
-    if (poemLoadedDay.current === d) return
-    poemLoadedDay.current = d
     let alive = true
-    fetchPoem(d).then((p) => { if (alive) setPoem(p) })
+    fetchPoem(dayKey()).then((p) => { if (alive) setPoem(p) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
