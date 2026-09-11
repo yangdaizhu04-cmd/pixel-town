@@ -137,6 +137,10 @@ a:hover { text-decoration: underline; }
 .elder h4 { font-size: 14px; margin-bottom: 8px; }
 .elder-sub { font-size: 12px; color: var(--ink2); margin: 6px 0; }
 .elder-tip { font-size: 13px; line-height: 1.6; }
+.elder-poem { margin-top: 10px; padding-top: 8px; border-top: 2px dashed var(--sand2); }
+.elder-poem-mark { display: block; font-size: 11px; color: var(--ink2); margin-bottom: 4px; }
+.elder-poem-text { font-size: 13px; line-height: 1.7; margin-bottom: 4px; white-space: pre-line; }
+.elder-poem-src { font-size: 11px; color: var(--ink2); }
 
 /* ---------- 芯片 / 按钮 / 表单 ---------- */
 .chip {

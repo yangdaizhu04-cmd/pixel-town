@@ -12,6 +12,7 @@ import { webdavUpload, backupFilename, backupPayload } from './lib/webdav.js'
 import { ACHIEVEMENTS } from './lib/achievements.js'
 import { PLANT_META } from './lib/shop.js'
 import { dayKey, addDays, pickByDay, daysBetween, timeOfDay, weekKey } from './lib/dates.js'
+import { fetchPoem } from './lib/poem.js'
 import Dashboard from './pages/Dashboard.jsx'
 import Todos from './pages/Todos.jsx'
 import Ledger from './pages/Ledger.jsx'
@@ -76,6 +77,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   const [installEvt, setInstallEvt] = useState(null)
+  // 每日诗词（今日题词）：poem.js 内部按日期缓存，这里只负责把首次结果接进来
+  const [poem, setPoem] = useState(null)
+  const poemLoadedDay = useRef(null)
   // 首次启动引导：只在没标记过时弹一次（localStorage 记忆）
   const [showIntro, setShowIntro] = useState(() => {
     try { return !localStorage.getItem('pixel-town-seen-intro') } catch { return true }
@@ -123,6 +127,17 @@ export default function App() {
       emit('toast', { icon: '☁️', text: '已自动备份到网盘（含每日留档）' })
     }).catch(() => { autoBackupSent.current = null }) // 失败不打扰，下次交互再试
   }, [state, dispatch])
+
+  // 每日诗词：应用层面只挂载一次；跨天重新打开页面时会再拉一次（内部缓存按天换新）
+  useEffect(() => {
+    const d = dayKey()
+    if (poemLoadedDay.current === d) return
+    poemLoadedDay.current = d
+    let alive = true
+    fetchPoem(d).then((p) => { if (alive) setPoem(p) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // PWA 安装提示（beforeinstallprompt 只出现一次，保存下来做成手动按钮 + 弹安装引导）
   useEffect(() => {
@@ -385,6 +400,13 @@ export default function App() {
             <Bar pct={(profile.xp / need) * 100} color="gold" />
             <p className="elder-sub">Lv.{profile.level} · {profile.xp}/{need} XP · 连续 {profile.streak} 天</p>
             <p className="elder-tip">{pickByDay(TIPS, 'tip')}</p>
+            {poem && (
+              <div className="elder-poem">
+                <span className="elder-poem-mark">📜 今日题词{poem.source === 'fallback' ? ' · 离线精选' : ''}</span>
+                <p className="elder-poem-text">{poem.text}</p>
+                <span className="elder-poem-src">{poem.dynasty && `${poem.dynasty}·`}{poem.author}{poem.title && `《${poem.title}》`}</span>
+              </div>
+            )}
           </div>
         </aside>
 
