@@ -3,6 +3,9 @@
 //   1) 指定城市：城市名 → geocoding 拿经纬度 → forecast 拿 WMO weathercode
 //   2) 跟随定位：浏览器定位拿经纬度 → forecast；城市名用 BigDataCloud 免费逆地理编码
 // 缓存 2 小时，key 区分来源；失败一律返回 null，由调用方回退到本地伪随机天气。
+// 每个子 key（geo / city:xx）各占一个 localStorage 条目，恢复具体的城市就不会互相挤掉。
+import { cacheRead, cacheWrite } from './cache.js'
+
 const CACHE_KEY = 'pixel-town-weather-v1'
 const GEO_KEY = 'pixel-town-geo-v1' // 最近一次定位坐标（30 分钟内复用，避免反复弹权限）
 const MAX_AGE = 2 * 3600 * 1000
@@ -21,16 +24,8 @@ const COPY = {
   drop: '外面真的在下雨，适合待在屋里，泡杯茶做点小事。',
 }
 
-function readCache(key) {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CACHE_KEY))
-    if (raw && raw.key === key && Date.now() - raw.at < MAX_AGE) return raw.data
-  } catch { /* ignore */ }
-  return null
-}
-function writeCache(key, data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), key, data })) } catch { /* ignore */ }
-}
+const weatherRead = (key) => cacheRead(`${CACHE_KEY}:${key}`, MAX_AGE)?.data ?? null
+const weatherWrite = (key, data) => cacheWrite(`${CACHE_KEY}:${key}`, data)
 
 async function fetchForecast(lat, lon, signal) {
   const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { signal })
@@ -52,7 +47,7 @@ async function reverseGeocode(lat, lon, signal) {
 // ---------- 跟随定位 ----------
 export async function fetchWeatherByGeo() {
   const key = 'geo'
-  const cached = readCache(key)
+  const cached = weatherRead(key)
   if (cached) return cached
 
   // 30 分钟内的定位坐标直接复用，避免每次进首页都弹权限/等定位
@@ -92,7 +87,7 @@ export async function fetchWeatherByGeo() {
       city: await reverseGeocode(lat, lon, ctrl.signal),
       live: true,
     }
-    writeCache(key, data)
+    weatherWrite(key, data)
     return data
   } catch {
     return null
@@ -106,7 +101,7 @@ export async function fetchWeatherByCity(city) {
   const c = (city || '').trim()
   if (!c) return null
   const key = `city:${c}`
-  const cached = readCache(key)
+  const cached = weatherRead(key)
   if (cached) return cached
 
   const ctrl = new AbortController()
@@ -127,7 +122,7 @@ export async function fetchWeatherByCity(city) {
       city: loc.name,
       live: true,
     }
-    writeCache(key, data)
+    weatherWrite(key, data)
     return data
   } catch {
     return null

@@ -1,12 +1,6 @@
 // ---------- 上周小镇周报：把散在各处的数据聚成一张本周卡片 ----------
 // 纯函数 + 单一入口，方便单元测试；周定义为「周一到周日」（周一是一周的开始）。
-import { dayKey, addDays, weekKey } from './dates.js'
-
-// end 所在周的 7 个日期（含未来几天也无妨，数据缺失自然记 0）
-const weekSpan = (end = dayKey()) => {
-  const mon = weekKey(end)
-  return Array.from({ length: 7 }, (_, i) => addDays(mon, i))
-}
+import { dayKey, addDays, weekSpan } from './dates.js'
 
 // 把 state 中落在 days 里的数据聚成一份指标
 const aggregate = (state, days) => {

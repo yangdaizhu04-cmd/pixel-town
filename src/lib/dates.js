@@ -48,6 +48,10 @@ export const daysBetween = (a, b) =>
 export const weekKey = (end = dayKey()) =>
   addDays(end, -((parseKey(end).getDay() + 6) % 7))
 
+// end 所在周的 7 个日期（周一到周日，含未来几天也无妨，数据缺失自然记 0）
+export const weekSpan = (end = dayKey()) =>
+  Array.from({ length: 7 }, (_, i) => addDays(weekKey(end), i))
+
 // 稳定的伪随机（同一 key 每天结果一致），用于每日天气/语录
 export const hashOf = (str) => {
   let h = 0

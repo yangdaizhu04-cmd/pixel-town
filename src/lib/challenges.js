@@ -1,12 +1,6 @@
 // ---------- 每周小挑战：每周一自动 roll 一个主题，达成自动发金币 ----------
 // 宽恕优先：完不成本周就翻篇，不扣任何东西；下周 roll 新的（不重复上周）。
-import { dayKey, addDays, weekKey, daysBetween } from './dates.js'
-
-// 本周这 7 天（含未来几天也无妨，没数据自然记 0）
-const weekSpan = (end = dayKey()) => {
-  const mon = weekKey(end)
-  return Array.from({ length: 7 }, (_, i) => addDays(mon, i))
-}
+import { dayKey, weekKey, weekSpan, daysBetween } from './dates.js'
 
 export const CHALLENGES = [
   {

@@ -1,4 +1,6 @@
 // 每日 AI 新闻：rss2json 在线抓取 + 内置精选兜底，本地缓存 6 小时
+import { cacheRead, cacheWrite } from './cache.js'
+
 const CACHE_KEY = 'pixel-town-news-v1'
 const MAX_AGE = 6 * 3600 * 1000
 
@@ -51,18 +53,14 @@ async function fetchOne(src, signal) {
 }
 
 export function readNewsCache() {
-  try {
-    const c = JSON.parse(localStorage.getItem(CACHE_KEY))
-    if (c && Date.now() - c.at < MAX_AGE && c.items && c.items.length) return c
-  } catch { /* ignore */ }
-  return null
+  const c = cacheRead(CACHE_KEY, MAX_AGE, (d) => d && Array.isArray(d.items) && d.items.length)
+  if (!c) return null
+  return { items: c.data.items, cachedAt: c.at, source: 'cache' }
 }
 
 export async function fetchNews(force = false) {
-  if (!force) {
-    const c = readNewsCache()
-    if (c) return { items: c.items, cachedAt: c.at, source: 'cache' }
-  }
+  const c = readNewsCache()
+  if (!force && c) return c
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 9000)
   try {
@@ -82,7 +80,7 @@ export async function fetchNews(force = false) {
     if (!items.length) return { items: NEWS_FALLBACK, cachedAt: Date.now(), source: 'fallback' }
     items.sort((a, b) => (a.date < b.date ? 1 : -1))
     const picked = items.slice(0, 20)
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), items: picked })) } catch { /* ignore */ }
+    cacheWrite(CACHE_KEY, { items: picked })
     return { items: picked, cachedAt: Date.now(), source: 'live' }
   } catch {
     clearTimeout(timer)

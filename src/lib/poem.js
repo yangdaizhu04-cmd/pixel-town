@@ -6,6 +6,7 @@
 //       离线 / 接口异常时回退到内置名句（按当天日期伪随机选一首，同一天稳定不变）。
 // 主句取整首诗的前两行（多数诗首联即是可读的一句），过长则退化成一行。
 import { dayKey, hashOf } from './dates.js'
+import { cacheRead, cacheWrite } from './cache.js'
 
 const CACHE_KEY = 'pixel-town-poem-v1'
 const MAX_AGE = 24 * 3600 * 1000
@@ -57,17 +58,6 @@ function toPoem(raw) {
   }
 }
 
-function readCache(day) {
-  try {
-    const raw = JSON.parse(localStorage.getItem(CACHE_KEY))
-    if (raw && raw.day === day && Date.now() - raw.at < MAX_AGE) return raw.data
-  } catch { /* ignore */ }
-  return null
-}
-function writeCache(day, data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), day, data })) } catch { /* ignore */ }
-}
-
 const fallbackOf = (day) => POEMS_FALLBACK[hashOf(day + SALT) % POEMS_FALLBACK.length]
 
 // in-flight 去重：React StrictMode 会「挂载→清理→重挂载」，同一瞬间可能并发两次调用，
@@ -75,8 +65,8 @@ const fallbackOf = (day) => POEMS_FALLBACK[hashOf(day + SALT) % POEMS_FALLBACK.l
 const inflight = new Map()
 
 export async function fetchPoem(day = dayKey()) {
-  const cached = readCache(day)
-  if (cached) return { ...cached, source: 'cache' }
+  const cached = cacheRead(CACHE_KEY, MAX_AGE, (d) => d && d.day === day)
+  if (cached) return { ...cached.data, source: 'cache' }
   if (inflight.has(day)) return inflight.get(day)
   const p = doFetch(day).finally(() => inflight.delete(day))
   inflight.set(day, p)
@@ -91,7 +81,7 @@ async function doFetch(day) {
     if (!res.ok) throw new Error(`http ${res.status}`)
     const poem = toPoem(await res.json())
     if (!poem) return { ...fallbackOf(day), source: 'fallback' }
-    writeCache(day, poem)
+    cacheWrite(CACHE_KEY, { day, ...poem })
     return { ...poem, source: 'live' }
   } catch {
     return { ...fallbackOf(day), source: 'fallback' }

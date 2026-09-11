@@ -5,9 +5,15 @@
 // 否则用「导出备份」手动存文件（方案 A，见踩坑指南 43）。
 import { dayKey } from './dates.js'
 
-// Basic auth 的用户名密码可能是非 ASCII，先转 UTF-8 字节再 btoa
+// Basic auth 的用户名密码可能是非 ASCII，先转 UTF-8 字节再 btoa（取代已废弃的 unescape(encodeURIComponent(...))）
+const utf8ToBase64 = (s) => {
+  const bytes = new TextEncoder().encode(s)
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin)
+}
 const authHeader = (user, pass) =>
-  'Basic ' + btoa(unescape(encodeURIComponent(`${user}:${pass}`)))
+  'Basic ' + utf8ToBase64(`${user}:${pass}`)
 
 const normUrl = (u) => {
   const s = (u || '').trim().replace(/\/+$/, '')

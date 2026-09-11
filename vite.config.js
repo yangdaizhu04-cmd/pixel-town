@@ -15,5 +15,13 @@ export default defineConfig({
   base: './',
   server: { host: true, https },
   preview: { host: true, https },
-  test: { environment: 'jsdom' },
+  test: {
+    environment: 'jsdom',
+    coverage: {
+      provider: 'v8',
+      include: ['src/lib/**'],
+      exclude: ['src/lib/__tests__/**'],
+      reporter: ['text-summary'],
+    },
+  },
 })

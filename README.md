@@ -121,6 +121,7 @@ src/
     ai.js             大模型客户端（SSE 流式 + ACT 动作解析）+ 本地智能体规则
     weekly.js         上周小镇周报聚合（纯函数，本周 vs 上周 + 环比）
     challenges.js     每周挑战模板与进度判定
+    cache.js          localStorage + TTL 缓存工具（news / weather / poem 复用）
     dates.js / anim.js
   components/         ui（Panel/Btn/Modal/confirmBox）/ effects / SettingsModal / ShopModal / AgentChat
   pages/              Dashboard / Todos / Ledger / Habits / News / Study / English / Weight / Review / Museum

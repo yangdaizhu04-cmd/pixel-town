@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useApp, studyDone } from '../lib/store.jsx'
 import { Panel, Btn, Bar, Empty, Chip, Field, confirmBox } from '../components/ui.jsx'
 import { Bars } from '../lib/charts.jsx'
@@ -8,6 +8,13 @@ import { pomoSubscribe, pomoStart, pomoPause, pomoResume, pomoReset, pomoStop, p
 import { dayKey, lastNDays, fmtShort, daysBetween, WEEKDAYS } from '../lib/dates.js'
 
 const POMO_MINS = [15, 25, 45, 60]
+const SLOTS = [
+  { id: 'dawn', label: '🌅 清晨', a: 5, b: 9 },
+  { id: 'am', label: '☀️ 上午', a: 9, b: 12 },
+  { id: 'pm', label: '🌤️ 下午', a: 12, b: 18 },
+  { id: 'eve', label: '🌙 晚间', a: 18, b: 23 },
+  { id: 'night', label: '🌌 深夜', a: 23, b: 24 },
+]
 const fmtClock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
 
 function Pomodoro() {
@@ -156,29 +163,37 @@ export default function Study() {
   const [note, setNote] = useState('')
 
   const t = dayKey()
-  const week = lastNDays(7).map((d) => ({
-    label: WEEKDAYS[new Date(`${d}T00:00:00`).getDay()],
-    value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.day === d).reduce((n, x) => n + x.min, 0), 0),
-    color: 'gold',
-  }))
+  // 派生统计依赖 state.study，用 useMemo 缓存，避免计划/记录增多后每次渲染都重算（待优化 5）
+  const week = useMemo(
+    () => lastNDays(7, t).map((d) => ({
+      label: WEEKDAYS[new Date(`${d}T00:00:00`).getDay()],
+      value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.day === d).reduce((n, x) => n + x.min, 0), 0),
+      color: 'gold',
+    })),
+    [state.study, t],
+  )
   // 专注统计：近 14 天时长 + 时段分布（只统计带时刻的新记录）
-  const days14 = lastNDays(14, t).map((d) => ({
-    label: String(+d.slice(8, 10)),
-    value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.day === d).reduce((n, x) => n + x.min, 0), 0),
-    color: 'green',
-  }))
+  const days14 = useMemo(
+    () => lastNDays(14, t).map((d) => ({
+      label: String(+d.slice(8, 10)),
+      value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.day === d).reduce((n, x) => n + x.min, 0), 0),
+      color: 'green',
+    })),
+    [state.study, t],
+  )
   const total14 = days14.reduce((m, x) => m + x.value, 0)
-  const SLOTS = [
-    { id: 'dawn', label: '🌅 清晨', a: 5, b: 9 },
-    { id: 'am', label: '☀️ 上午', a: 9, b: 12 },
-    { id: 'pm', label: '🌤️ 下午', a: 12, b: 18 },
-    { id: 'eve', label: '🌙 晚间', a: 18, b: 23 },
-    { id: 'night', label: '🌌 深夜', a: 23, b: 24 },
-  ]
-  const slotMin = (a, b) =>
-    state.study.reduce((m, p) => m + p.sessions.filter((x) => x.h != null && x.h >= a && x.h < b).reduce((n, x) => n + x.min, 0), 0)
-  const slots = SLOTS.map((s) => ({ label: s.label, value: slotMin(s.a, s.b), color: 'orange' }))
-  const withHour = state.study.reduce((m, p) => m + p.sessions.filter((x) => x.h != null).length, 0)
+  const slots = useMemo(
+    () => SLOTS.map((s) => ({
+      label: s.label,
+      value: state.study.reduce((m, p) => m + p.sessions.filter((x) => x.h != null && x.h >= s.a && x.h < s.b).reduce((n, x) => n + x.min, 0), 0),
+      color: 'orange',
+    })),
+    [state.study],
+  )
+  const withHour = useMemo(
+    () => state.study.reduce((m, p) => m + p.sessions.filter((x) => x.h != null).length, 0),
+    [state.study],
+  )
 
   const addPlan = () => {
     const n = title.trim()
