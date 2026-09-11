@@ -219,6 +219,9 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
               <input type="password" value={form.webdavPass || ''} onChange={(e) => setForm({ ...form, webdavPass: e.target.value })} autoComplete="off" />
             </Field>
           </div>
+          {/^http:\/\//i.test(form.webdavUrl || '') && (
+            <p className="settings-hint">⚠️ 当前是 http:// 明文地址，账号密码会未加密传输；能改 https:// 就改，别在公共网络下用。</p>
+          )}
           <div className="btn-row">
             <Btn color="blue" disabled={!form.webdavUrl || !form.webdavUser || davBusy === 'up'} onClick={davUpload}>{davBusy === 'up' ? '上传中…' : '☁️ 备份到网盘'}</Btn>
             <Btn disabled={!form.webdavUrl || !form.webdavUser || davBusy === 'down'} onClick={davDownload}>{davBusy === 'down' ? '读取中…' : '☁️ 从网盘恢复'}</Btn>

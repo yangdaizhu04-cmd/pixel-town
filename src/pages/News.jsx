@@ -12,27 +12,30 @@ export default function News() {
   const { state, dispatch } = useApp()
   const [loading, setLoading] = useState(false)
 
-  const load = async (force = false) => {
-    setLoading(true)
-    const r = await fetchNews(force)
+  // fetch + 入库 + 提示只有这一份实现；「进页自动补拉」和「手动刷新」都走它
+  const apply = (r) => {
     dispatch({ type: 'NEWS_SET', items: r.items, cachedAt: r.cachedAt, source: r.source })
-    setLoading(false)
     if (r.source === 'live') emit('toast', { icon: '📰', text: `小信鸽带回了 ${r.items.length} 条新鲜资讯` })
     if (r.source === 'fallback') emit('toast', { icon: '🕊️', text: '新闻源暂时够不着，上了一份内置精选' })
+  }
+  const load = async (force = false) => {
+    setLoading(true)
+    const r = await fetchNews(force).catch(() => null) // lib 内部已兜底，这里是防御
+    if (!r) { setLoading(false); return }
+    apply(r)
+    setLoading(false)
   }
 
   useEffect(() => {
     const stale = !state.news.items.length || Date.now() - state.news.cachedAt > 6 * 3600 * 1000
-    if (!stale || loading) return
+    if (!stale) return
     // alive 守卫：拉取期间切走（组件卸载）后不再 setState / 不把旧请求结果覆盖回来（竞态防护）
     let alive = true
     ;(async () => {
       const r = await fetchNews(false)
       if (!alive) return
-      dispatch({ type: 'NEWS_SET', items: r.items, cachedAt: r.cachedAt, source: r.source })
+      apply(r)
       setLoading(false)
-      if (r.source === 'live') emit('toast', { icon: '📰', text: `小信鸽带回了 ${r.items.length} 条新鲜资讯` })
-      if (r.source === 'fallback') emit('toast', { icon: '🕊️', text: '新闻源暂时够不着，上了一份内置精选' })
     })()
     return () => { alive = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

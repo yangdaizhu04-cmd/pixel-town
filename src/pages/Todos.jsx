@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp, todosOpen, todosDoneToday } from '../lib/store.jsx'
 import { Panel, Btn, Bar, Empty, Chip, confirmBox } from '../components/ui.jsx'
 import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx } from '../lib/gamify.js'
@@ -12,6 +12,11 @@ const CATS = [
 ]
 const catIcon = (c) => (CATS.find((x) => x.id === c) || CATS[3]).icon
 const REPEAT_LABEL = { daily: '↻ 每天', weekly: '↻ 每周' }
+
+// 单日单条待办只奖励一次，key 里带日期天然跨天失效。
+// 必须放模块级而不是 useRef：App 的 <main key={page}> 切页会整页重挂，ref 会被清空，
+// 反复进出页面就能对同一条待办重复领 XP（普通待办「完成→撤销→再完成」同理）。
+const rewardedToday = new Set()
 
 // 难度标记：只有非普通才显示，避免普通任务刷屏
 function DiffMark({ diff }) {
@@ -28,12 +33,11 @@ export default function Todos() {
   const [diff, setDiff] = useState(2)
 
   const t = dayKey()
-  const open = todosOpen(state).sort((a, b) => (b.prio - a.prio) || (a.day < b.day ? -1 : 1))
-  const done = todosDoneToday(state)
+  // todosOpen/todosDoneToday 只读 s.todos（isDue 依赖当天日期），依赖切片比整个 state 更准；oxlint 看不进纯函数内部，行内豁免
+  const open = useMemo(() => todosOpen(state).sort((a, b) => (b.prio - a.prio) || (a.day < b.day ? -1 : 1)), [state.todos, t]) // eslint-disable-line react-hooks/exhaustive-deps
+  const done = useMemo(() => todosDoneToday(state), [state.todos, t]) // eslint-disable-line react-hooks/exhaustive-deps
   const total = open.length + done.length
   const pct = total ? (done.length / total) * 100 : 0
-  // 重复待办单日只奖励一次：防止「取消今日完成 → 再勾回」反复刷 XP（刷新后失效，属宽恕优先的折中）
-  const rewardedToday = useRef(new Set())
 
   const add = () => {
     const s = text.trim()
@@ -51,9 +55,9 @@ export default function Todos() {
     dispatch({ type: 'TODO_TOGGLE', id: todo.id })
     if (nowDone) {
       sfx('check')
-      const firstToday = !todo.repeat || !rewardedToday.current.has(todo.id)
-      if (firstToday) {
-        rewardedToday.current.add(todo.id)
+      const rewardKey = `${t}:${todo.id}`
+      if (!rewardedToday.has(rewardKey)) {
+        rewardedToday.add(rewardKey)
         const r = rewardBy(REWARDS.todo, todo.diff)
         reward(dispatch, { ...r, msg: `完成任务 · ${diffOf(todo).label}`, icon: '✅', confetti: todo.diff === 3 })
       }

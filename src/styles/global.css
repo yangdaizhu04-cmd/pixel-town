@@ -6,6 +6,9 @@
 :root {
   --sky1: #9fdcec;
   --sky2: #d3f0f5;
+  /* --sky3 必须在亮色 :root 里有定义：body 渐变背景引用了它，缺一个变量整条 background 声明作废，
+     day 时段（8-17 点，最常用）亮色主题会塌成白底（暗色主题原本在下方有兜底，所以一直没暴露） */
+  --sky3: #d3f0f5;
   --paper: #fdf6e3;
   --paper2: #fffdf4;
   --sand: #f4e3b8;

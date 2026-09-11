@@ -19,7 +19,16 @@ const subs = new Set()
 let timer = null
 
 const snap = () => ({ ...st })
-const tell = () => subs.forEach((f) => f(snap()))
+// 显示相关字段的签名：250ms 的 tick 里秒数往往没变，签名相同就不打扰订阅者
+//（否则 PomoBadge/学习页/标签页标题每秒被无效重渲染 4 次）
+let lastSig = ''
+const sigOf = () => `${st.running}|${st.left}|${st.mode}|${st.total}|${st.planId}|${st.breakMin}`
+const tell = () => {
+  const sig = sigOf()
+  if (sig === lastSig) return
+  lastSig = sig
+  subs.forEach((f) => f(snap()))
+}
 
 // 只读快照：给事件监听方（如 App 的休息轮提示）看当前状态用
 export const pomoSnap = snap

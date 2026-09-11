@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useApp } from '../lib/store.jsx'
 import { Modal, Btn, Chip, Empty, confirmBox } from './ui.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
-import { MAX_POTS, PLANT_META, DECOR_GOODS, HAT_GOODS } from '../lib/shop.js'
+import { MAX_POTS, PLANT_META, DECOR_GOODS, HAT_GOODS, POT_GOODS } from '../lib/shop.js'
 import { sfx, emit } from '../lib/gamify.js'
 
 const TABS = [
@@ -90,20 +90,19 @@ export default function ShopModal({ open, onClose }) {
 
         {tab === 'pot' && (
           <div className="shop-list">
-            <Item
-              name="第四个花盆" desc="花园扩容一格" cost={60} sprite="pot_empty"
-              disabled={potCount >= MAX_POTS}
-              reason={potCount >= MAX_POTS ? '花园已经满啦' : ''}
-              owned={potCount >= 4}
-              onBuy={() => buy('pot', 'pot-4', 60)}
-            />
-            <Item
-              name="第五个花盆" desc="花园再扩一格" cost={120} sprite="pot_empty"
-              disabled={potCount >= MAX_POTS}
-              reason={potCount >= MAX_POTS ? '花园已经满啦' : ''}
-              owned={potCount >= 5}
-              onBuy={() => buy('pot', 'pot-5', 120)}
-            />
+            {/* 价格/名称来自 shop.js 的 POT_GOODS，别在这里硬编码第二份 */}
+            {POT_GOODS.map((g) => {
+              const slot = Number(g.id.split('-')[1]) // pot-4 / pot-5 → 第几个盆位
+              return (
+                <Item
+                  key={g.id} name={g.name} desc={g.desc} cost={g.cost} sprite="pot_empty"
+                  disabled={potCount >= MAX_POTS}
+                  reason={potCount >= MAX_POTS ? '花园已经满啦' : ''}
+                  owned={potCount >= slot}
+                  onBuy={() => buy('pot', g.id, g.cost)}
+                />
+              )
+            })}
             {potCount >= MAX_POTS && <p className="muted">花园位置已全部解锁（{MAX_POTS} 盆）。</p>}
           </div>
         )}

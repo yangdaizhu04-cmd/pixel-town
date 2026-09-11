@@ -56,19 +56,26 @@ export default function AgentChat({ onOpenSettings }) {
     let action = null
     let acts = []
     if (hasKey) {
+      // 60 秒兜底中止：网络挂起时不再永久卡在「输入中」（askAI 本身支持 signal，之前一直没传）
+      const ctrl = new AbortController()
+      const timeout = setTimeout(() => ctrl.abort(), 60000)
       try {
         const full = await askAI({
           state,
           input: q,
+          signal: ctrl.signal,
           onDelta: (_d, fullText) => setStreamText(fullText),
         })
         const parsed = parseActs(full)
         reply = parsed.clean || '（阿咕咕哝了一声，什么也没说）'
         acts = parsed.acts
       } catch (err) {
+        const why = ctrl.signal.aborted ? '60 秒没有等到回复' : err.message
         const local = localAgent(q, state)
-        reply = `阿咕的大脑打了个盹（${err.message}），先用离线小脑回答你：\n${local.reply}`
+        reply = `阿咕的大脑打了个盹（${why}），先用离线小脑回答你：\n${local.reply}`
         action = local.action
+      } finally {
+        clearTimeout(timeout)
       }
     } else {
       await new Promise((r) => setTimeout(r, 550))
@@ -103,8 +110,8 @@ export default function AgentChat({ onOpenSettings }) {
       </header>
 
       <div className="chat-list" ref={listRef}>
-        {state.chat.map((m, i) => (
-          <div key={i} className={`msg ${m.role}`}>
+        {state.chat.map((m) => (
+          <div key={m.id} className={`msg ${m.role}`}>
             {m.role === 'assistant' && <BirdAvatar scale={2} className="msg-avatar" />}
             <div className="msg-bubble">
               {String(m.content).split('\n').map((line, j) => <p key={j}>{line}</p>)}

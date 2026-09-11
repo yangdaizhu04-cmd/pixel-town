@@ -1,12 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../lib/store.jsx'
-import { Panel, Modal, Btn, Bar, Field, Empty, confirmBox } from '../components/ui.jsx'
-import { PixelSprite } from '../lib/sprites.jsx'
-import { ACHIEVEMENTS, ACH_METRICS, metricOf, customValue, customDesc } from '../lib/achievements.js'
+import { Panel, Btn, Empty, confirmBox } from '../components/ui.jsx'
 import { PLANT_META } from '../lib/shop.js'
 import { sfx, emit } from '../lib/gamify.js'
-import { dayKey, addDays, parseKey, fmtShort, fmtLong, lastNDays } from '../lib/dates.js'
 import { weeklyReport } from '../lib/weekly.js'
+import Heatmap from '../components/museum/Heatmap.jsx'
+import PomoWall from '../components/museum/PomoWall.jsx'
+import DexGrid from '../components/museum/DexGrid.jsx'
+import TrophyWall from '../components/museum/TrophyWall.jsx'
+import CustomAchModal from '../components/museum/CustomAchModal.jsx'
+import ShareCard from '../components/museum/ShareCard.jsx'
+import { ACHIEVEMENTS } from '../lib/achievements.js'
 
 // 环比小箭头：正/负/持平
 const Delta = ({ v, unit = '' }) =>
@@ -15,8 +19,9 @@ const Delta = ({ v, unit = '' }) =>
       : <span className="w-diff">—</span>
 
 // ---------- 上周小镇周报 ----------
-function WeeklyReport({ state }) {
-  const r = weeklyReport(state)
+// report 由父组件算好传入：Museum 主体和这里各自调一次 weeklyReport 会把两周数据聚合两遍
+function WeeklyReport({ report }) {
+  const r = report
   const w = r.thisWeek
   const cells = [
     { icon: '📝', label: '完成待办', value: `${w.todos} 件`, d: r.diff.todos, unit: '' },
@@ -42,330 +47,13 @@ function WeeklyReport({ state }) {
   )
 }
 
-// ---------- XP 热力图（26 周，GitHub 贡献图的小镇版） ----------
-const HEAT = ['#efe3c4', '#cfe8b8', '#a8d78d', '#79b851', '#ffd34e']
-const heatIdx = (xp) => (xp <= 0 ? 0 : xp < 30 ? 1 : xp < 60 ? 2 : xp < 90 ? 3 : 4)
-
-function Heatmap({ xpLog }) {
-  const ref = useRef(null)
-  const scale = 11
-  const weeks = 26
-  const t = dayKey()
-  const days = Array.from({ length: weeks * 7 }, (_, i) => addDays(t, -(weeks * 7 - 1 - i)))
-  // 第一格对齐到周日
-  const pad = parseKey(days[0]).getDay()
-  const cells = [...Array(pad).fill(null), ...days.map((d) => ({ d, xp: xpLog?.[d] || 0 }))]
-  while (cells.length % 7 !== 0) cells.push(null)
-  const cols = cells.length / 7
-  const sig = days.map((d) => xpLog?.[d] || 0).join(',') + t
-
-  useEffect(() => {
-    const c = ref.current
-    if (!c) return
-    c.width = cols
-    c.height = 7
-    const ctx = c.getContext('2d')
-    ctx.clearRect(0, 0, cols, 7)
-    cells.forEach((cell, i) => {
-      if (!cell) return
-      ctx.fillStyle = HEAT[heatIdx(cell.xp)]
-      ctx.fillRect(Math.floor(i / 7), i % 7, 1, 1)
-    })
-  }, [sig]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const total = days.reduce((m, d) => m + (xpLog?.[d] || 0), 0)
-
-  return (
-    <div className="heatmap-wrap">
-      <canvas
-        ref={ref}
-        className="px-chart"
-        style={{ width: cols * scale, height: 7 * scale, imageRendering: 'pixelated' }}
-      />
-      <div className="heatmap-legend">
-        <span>半年共 {total} XP</span>
-        <span className="heat-keys">
-          安静
-          {HEAT.map((h) => <i key={h} style={{ background: h }} />)}
-          燃
-        </span>
-      </div>
-    </div>
-  )
-}
-
-// ---------- 专注番茄田（每完成一个番茄钟，墙里就多一颗番茄） ----------
-function PomoWall({ state }) {
-  const log = state.pomoLog || []
-  const days = lastNDays(28)
-  const byDay = {}
-  for (const p of log) { (byDay[p.t] ||= []).push(p) }
-  const totalMin = log.reduce((m, p) => m + (p.min || 0), 0)
-  const hours = Math.round((totalMin / 60) * 10) / 10
-
-  if (!log.length) {
-    return <Empty icon="🍅">还没种下番茄。去「学习计划」页开始一段专注，完成后这里会长出第一颗。</Empty>
-  }
-  return (
-    <>
-      <div className="pomo-wall">
-        {days.map((d) => {
-          const list = byDay[d]
-          const n = list ? Math.min(list.length, 5) : 0
-          const more = list ? list.length - n : 0
-          return (
-            <div key={d} className={`pw-cell ${list ? 'on' : ''}`} title={list ? `${fmtShort(d)} · ${list.length} 颗番茄` : fmtShort(d)}>
-              {Array.from({ length: n }, (_, i) => <PixelSprite key={i} name="tomato" scale={1} />)}
-              {list && more > 0 && <span className="pw-n">+{more}</span>}
-              {!list && <span className="pw-n">·</span>}
-            </div>
-          )
-        })}
-      </div>
-      <p className="muted">一格是一天：累计 {log.length} 颗番茄 · 约 {hours} 小时专注。种满 50 颗会解锁成就「番茄田」哦。</p>
-    </>
-  )
-}
-
-// ---------- 植物图鉴 ----------
-function Collection({ state }) {
-  const { collection = [], unlockedKinds = [] } = state.profile
-  return (
-    <div className="dex-grid">
-      {PLANT_META.map((p) => {
-        const bloomed = collection.includes(p.id)
-        const unlocked = unlockedKinds.includes(p.id)
-        return (
-          <div key={p.id} className={`dex-item card ${bloomed ? '' : 'dim'}`}>
-            <PixelSprite name={bloomed ? `bloom_${p.id}` : unlocked ? 'p3' : 'pot_empty'} scale={4} className={bloomed ? '' : 'dim'} />
-            <b>{unlocked ? p.name : '？？？'}</b>
-            <span className="dex-note">{bloomed ? '已盛开 ✓' : unlocked ? '种下后等你养到盛开' : '商店里有它的种子'}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ---------- 成就墙（内置 + 自定义） ----------
-function TrophyWall({ state, onClaim, onDel }) {
-  const unlocked = state.profile.achievements || {}
-  const custom = state.profile.customAch || []
-  return (
-    <div className="ach-grid">
-      {ACHIEVEMENTS.map((a) => {
-        const day = unlocked[a.id]
-        return (
-          <div key={a.id} className={`ach-item card ${day ? 'on' : 'dim'}`} title={a.desc}>
-            <span className="ach-icon">{day ? a.icon : '🔒'}</span>
-            <div className="ach-info">
-              <b>{a.name}</b>
-              <span>{day ? `${fmtShort(day)} 达成 · +${a.coins} 🪙` : a.desc}</span>
-            </div>
-          </div>
-        )
-      })}
-      {custom.map((a) => {
-        const day = unlocked[a.id]
-        const m = metricOf(a.metric)
-        const val = customValue(a, state)
-        const isManual = a.metric === 'manual'
-        return (
-          <div key={a.id} className={`ach-item card cust ${day ? 'on' : 'dim'}`} title={customDesc(a)}>
-            <span className="ach-icon">{day ? (m?.icon || '🕯️') : '🔒'}</span>
-            <div className="ach-info">
-              <b>
-                <span className="ach-name">{a.name}</span>
-                {day === undefined && isManual && (
-                  <span className="ach-marks">
-                    <Btn size="xs" color="green" onClick={() => onClaim(a)}>点亮</Btn>
-                  </span>
-                )}
-                <button className="del" title="删除自定义成就" onClick={() => onDel(a)}>×</button>
-              </b>
-              <span>
-                {day ? `${fmtShort(day)} 达成 · +${a.coins} 🪙` : `${customDesc(a)} · +${a.coins} 🪙`}
-              </span>
-              {!day && !isManual && (
-                <Bar pct={(val / Math.max(1, a.target)) * 100} color="green" className="ach-progress" />
-              )}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ---------- 新建自定义成就 ----------
-function CustomAchModal({ open, onClose }) {
-  const { dispatch } = useApp()
-  const [name, setName] = useState('')
-  const [metric, setMetric] = useState('todosDone')
-  const [target, setTarget] = useState(10)
-  const [coins, setCoins] = useState(10)
-
-  const add = () => {
-    const n = name.trim()
-    if (!n) return
-    if (metric !== 'manual' && target < 1) return
-    dispatch({
-      type: 'ACH_CUSTOM_ADD',
-      meta: {
-        name: n,
-        metric,
-        target: metric === 'manual' ? 0 : Math.max(1, Math.round(target)),
-        coins: Math.max(0, Math.min(60, Math.round(coins))),
-      },
-    })
-    sfx('pop')
-    onClose()
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="🎯 自定义成就">
-      <div className="field-stack">
-        <Field label="成就名称（想庆祝的那件事）">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：读完 10 本书" autoFocus />
-        </Field>
-        <Field label="达成方式">
-          <select value={metric} onChange={(e) => setMetric(e.target.value)}>
-            {ACH_METRICS.map((m) => <option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}
-            <option value="manual">🕯️ 手动点亮（自己的心愿）</option>
-          </select>
-        </Field>
-        {metric !== 'manual' && (
-          <Field label="目标值">
-            <input type="number" min={1} value={target} onChange={(e) => setTarget(Number(e.target.value))} />
-          </Field>
-        )}
-        <Field label="解锁奖励金币（0-60）">
-          <input type="number" min={0} max={60} value={coins} onChange={(e) => setCoins(Number(e.target.value))} />
-        </Field>
-        <p className="muted">计数型成就达到目标会自动解锁；手动心愿则由你亲手点亮。</p>
-      </div>
-      <div className="modal-foot">
-        <Btn onClick={onClose}>再想想</Btn>
-        <Btn color="green" onClick={add} disabled={!name.trim()}>建立成就</Btn>
-      </div>
-    </Modal>
-  )
-}
-
-// ---------- 分享卡片：像素风画布，可保存成图片 ----------
-function ShareCard({ state, open, onClose }) {
-  const ref = useRef(null)
-  const FONT = '"Fusion Pixel 12px Proportional Simplified Chinese","Fusion Pixel 12px Proportional SC",monospace'
-  const names = Object.keys(state.profile.achievements || {})
-  const totalXp = Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0)
-  const t = dayKey()
-  const weeks = 4
-  const heatDays = lastNDays(weeks * 7, t)
-
-  useEffect(() => {
-    if (!open) return
-    const run = () => {
-      const c = ref.current
-      if (!c) return
-      const W = 420
-      const H = 620
-      c.width = W * 2
-      c.height = H * 2
-      const ctx = c.getContext('2d')
-      ctx.scale(2, 2)
-      // 纸底 + 像素描边
-      ctx.fillStyle = '#fdf6e3'
-      ctx.fillRect(0, 0, W, H)
-      ctx.fillStyle = '#5b4a38'
-      const B = 8
-      ctx.fillRect(0, 0, W, B)
-      ctx.fillRect(0, H - B, W, B)
-      ctx.fillRect(0, 0, B, H)
-      ctx.fillRect(W - B, 0, B, H)
-      ctx.textAlign = 'center'
-      // 标题
-      ctx.fillStyle = '#4a3b2a'
-      ctx.font = `18px ${FONT}`
-      ctx.fillText('拾光小镇 · 我的小镇日志', W / 2, 52)
-      ctx.fillStyle = '#8a7a62'
-      ctx.font = `12px ${FONT}`
-      ctx.fillText(`${fmtLong(t).replace('· ', '')}`, W / 2, 74)
-      // 战绩
-      ctx.fillStyle = '#4a3b2a'
-      ctx.font = `15px ${FONT}`
-      const line1 = `Lv.${state.profile.level}  ·  累计 ${totalXp} XP  ·  连续 ${state.profile.streak} 天`
-      ctx.fillText(line1, W / 2, 118)
-      ctx.fillStyle = '#c77c1e'
-      ctx.fillText(`🪙 ${state.profile.coins} 金币  ·  点亮 ${names.length} 枚奖杯`, W / 2, 146)
-      // 近一周热力格
-      const cell = 12
-      const gap = 4
-      const gridW = weeks * cell + (weeks - 1) * gap
-      const x0 = (W - gridW) / 2
-      const y0 = 176
-      heatDays.forEach((d, i) => {
-        const xp = state.xpLog?.[d] || 0
-        ctx.fillStyle = HEAT[heatIdx(xp)]
-        ctx.fillRect(x0 + (i % weeks) * (cell + gap), y0 + Math.floor(i / weeks) * (cell + gap), cell, cell)
-      })
-      ctx.fillStyle = '#8a7a62'
-      ctx.font = `11px ${FONT}`
-      ctx.fillText('最近四周的每一天', W / 2, y0 + 4 * (cell + gap) + 14)
-      // 最近解锁的三枚奖杯
-      const recent = names.slice(-3)
-      recent.forEach((id, i) => {
-        const ach = [...ACHIEVEMENTS, ...(state.profile.customAch || [])].find((a) => a.id === id)
-        ctx.fillStyle = '#f4e3b8'
-        const ry = 240 + i * 52
-        ctx.fillRect(40, ry, W - 80, 40)
-        ctx.textAlign = 'left'
-        ctx.fillStyle = '#4a3b2a'
-        ctx.font = `13px ${FONT}`
-        ctx.fillText(`${ach?.icon || '🏆'} ${ach?.name || id}`, 56, ry + 17)
-        ctx.fillStyle = '#8a7a62'
-        ctx.font = `11px ${FONT}`
-        ctx.fillText(`${fmtShort(state.profile.achievements[id])} 达成  ·  +${ach?.coins ?? 0} 金币`, 56, ry + 32)
-        ctx.textAlign = 'center'
-      })
-      // 签名
-      ctx.fillStyle = '#8a7a62'
-      ctx.font = `13px ${FONT}`
-      ctx.fillText('—— 把每天的进步，都种进花园里', W / 2, H - 44)
-    }
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(run).catch(run)
-    else run()
-  }, [open, state, t]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const save = () => {
-    const c = ref.current
-    if (!c) return
-    const a = document.createElement('a')
-    a.download = `拾光小镇分享卡-${t}.png`
-    a.href = c.toDataURL('image/png')
-    a.click()
-    sfx('pop')
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="📸 分享卡" wide>
-      <div className="share-card-wrap">
-        <canvas ref={ref} className="share-card" style={{ width: 420, imageRendering: 'pixelated' }} />
-        <p className="muted">像素风分享卡：保存后发到群里，让朋友看看你的小镇有多热闹。</p>
-      </div>
-      <div className="modal-foot">
-        <Btn onClick={onClose}>再改改</Btn>
-        <Btn color="green" onClick={save}>💾 保存图片</Btn>
-      </div>
-    </Modal>
-  )
-}
-
 export default function Museum() {
   const { state, dispatch } = useApp()
   const [achOpen, setAchOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
-  const r = weeklyReport(state)
-  const totalXp = Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0)
+  // 打开弹窗等本页 setState 不应触发重新聚合两周数据
+  const report = useMemo(() => weeklyReport(state), [state])
+  const totalXp = useMemo(() => Object.values(state.xpLog || {}).reduce((m, x) => m + x, 0), [state.xpLog])
   const customAch = state.profile.customAch || []
   const achCount = Object.keys(state.profile.achievements || {}).length
 
@@ -388,10 +76,10 @@ export default function Museum() {
     <>
       <Panel
         title="上周小镇周报" icon="🗞️"
-        extra={<span className="xp-pill">本周 {r.days[0].slice(5).replace('-', '/')} 起</span>}
+        extra={<span className="xp-pill">本周 {report.days[0].slice(5).replace('-', '/')} 起</span>}
       >
         <div className="week-stats-wrap">
-          <WeeklyReport state={state} />
+          <WeeklyReport report={report} />
           <p className="muted">自动生成的本周小结，箭头是和上周比（↗ 变好 / ↘ 变少）。过去 7 天的努力都算数。</p>
         </div>
       </Panel>
@@ -422,7 +110,7 @@ export default function Museum() {
       >
         {(state.profile.collection || []).length === 0
           ? <Empty icon="🌱">还没有植物盛开。完成任务会自动浇水，盛开的那一刻会记在这里。</Empty>
-          : <Collection state={state} />}
+          : <DexGrid state={state} />}
       </Panel>
 
       <Panel

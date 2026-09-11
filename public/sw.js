@@ -1,7 +1,7 @@
 /* 拾光小镇 Service Worker：整站只有一个自包含 index.html，缓存它即可完全离线。
    只注册于 http(s) 环境；双击 file:// 打开时不受影响（靠 vite-plugin-singlefile 兜底）。
    缓存名随版本递增（package.json version → vX-Y-Z，见项目记忆「版本规则」），改版后旧缓存自动清除。 */
-const CACHE = 'pixel-town-v0-5-0'
+const CACHE = 'pixel-town-v0-6-0'
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png']
 
 self.addEventListener('install', (e) => {
@@ -27,7 +27,8 @@ self.addEventListener('fetch', (e) => {
       fetch(request)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put('./index.html', copy))
+          // 更新缓存必须挂在 waitUntil 上：respondWith 返回后 SW 可能立刻被杀，put 会静默丢失
+          e.waitUntil(caches.open(CACHE).then((c) => c.put('./index.html', copy)))
           return res
         })
         .catch(() => caches.match('./index.html'))
@@ -40,7 +41,7 @@ self.addEventListener('fetch', (e) => {
       const net = fetch(request)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(request, copy))
+          e.waitUntil(caches.open(CACHE).then((c) => c.put(request, copy)))
           return res
         })
         .catch(() => hit)

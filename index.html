@@ -2,6 +2,10 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <!-- CSP：本应用全部 JS/CSS/字体由构建内联（unsafe-inline + data:），数据接口地址用户可自配，
+         所以 connect-src 放行 http(s)（含 ws 供 dev HMR）；其余注入面（object/base/form）全部关死 -->
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https: http: ws: wss:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="拾光小镇 —— 一个治愈的像素风生活工作台：待办、记账、习惯打卡、AI 新闻、学习、英语、体重、复盘，完成任务给植物浇水。" />
     <meta name="theme-color" content="#79b851" />

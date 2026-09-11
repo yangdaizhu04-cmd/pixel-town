@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   useApp, todosOpen, todosDoneToday, monthInOut, balanceOf, lastWeight,
   stageOf, STAGE_NAMES, BLOOM_PTS,
@@ -7,9 +7,9 @@ import { PixelSprite } from '../lib/sprites.jsx'
 import { Panel, Btn, Bar, Chip } from '../components/ui.jsx'
 import ShopModal from '../components/ShopModal.jsx'
 import { MILESTONES, XP_GOAL, WATER_COST, emit, sfx, emitConfetti } from '../lib/gamify.js'
-import { MAX_POTS, PLANT_META, plantName } from '../lib/shop.js'
+import { MAX_POTS, PLANT_META, plantName, HARVEST_COINS, growersOf, thirstiestOf } from '../lib/shop.js'
 import { useGSAP, gsap, D } from '../lib/anim.js'
-import { greeting, fmtLong, pickByDay, dayKey } from '../lib/dates.js'
+import { greeting, fmtLong, pickByDay, dayKey, monthKey } from '../lib/dates.js'
 import { challengeOf } from '../lib/challenges.js'
 import { fetchWeatherByCity, fetchWeatherByGeo } from '../lib/weather.js'
 
@@ -46,9 +46,15 @@ export default function Dashboard() {
   const rootRef = useRef(null)
   const [shopOpen, setShopOpen] = useState(false)
   const [wxLoaded, setWxLoaded] = useState({ key: '', data: null })
-  const open = todosOpen(state)
-  const doneToday = todosDoneToday(state)
-  const habitsDone = state.habits.filter((h) => h.days[dayKey()]).length
+  // 派生数据 memo：本页渲染只依赖这几个切片，其它 state 变化（聊天、设置……）不再触发全量重算。
+  // 选择器只读对应切片（isDue 依赖当天日期）；oxlint 看不进纯函数内部，行内豁免
+  const today = dayKey()
+  const open = useMemo(() => todosOpen(state), [state.todos, today]) // eslint-disable-line react-hooks/exhaustive-deps
+  const doneToday = useMemo(() => todosDoneToday(state), [state.todos, today]) // eslint-disable-line react-hooks/exhaustive-deps
+  const habitsDone = useMemo(() => state.habits.filter((h) => h.days[today]).length, [state.habits, today])
+  const bal = useMemo(() => balanceOf(state), [state.ledger]) // eslint-disable-line react-hooks/exhaustive-deps
+  const mk = monthKey()
+  const io = useMemo(() => monthInOut(state, mk), [state.ledger, mk]) // eslint-disable-line react-hooks/exhaustive-deps
   const w = lastWeight(state)
   // 真实天气：跟随定位（weatherMode='geo'）或指定城市（'city'）；都未启用/失败时回退小镇预言。
   // 渲染期按「来源 key 是否已加载完成」派生，不在 effect 里同步 setState。
@@ -65,7 +71,8 @@ export default function Dashboard() {
     if (!wxKey) return
     let alive = true
     const job = wxMode === 'geo' ? fetchWeatherByGeo() : fetchWeatherByCity(state.settings.city)
-    job.then((r) => { if (alive) setWxLoaded({ key: wxKey, data: r }) })
+    // lib 内部已 catch，这里的 catch 只是防御「契约被打破」时的 unhandledrejection
+    job.then((r) => { if (alive) setWxLoaded({ key: wxKey, data: r }) }).catch(() => {})
     return () => { alive = false }
   }, [wxKey, wxMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -96,7 +103,7 @@ export default function Dashboard() {
   }, { scope: rootRef })
 
   const water = (potId) => {
-    // 指定盆的校验：空盆 / 已盛开的盆不能浇
+    // 预检只做「给用户的人话提示」，选盆本身用与 reducer 同一份的 shop.js 实现，避免两处逻辑漂移
     if (potId) {
       const pot = state.profile.pots.find((x) => x.id === potId)
       if (!pot?.kind) {
@@ -109,14 +116,11 @@ export default function Dashboard() {
         sfx('oops')
         return
       }
-    } else {
+    } else if (!growersOf(state.profile.pots, BLOOM_PTS).length) {
       // 自动浇最缺水的一盆；没有可浇的植物时提醒，避免白花金币
-      const growers = state.profile.pots.filter((x) => x.kind && x.pts < BLOOM_PTS)
-      if (!growers.length) {
-        emit('toast', { icon: '🪴', text: state.profile.pots.some((x) => x.kind) ? '小植物们都盛开啦，采集种子腾个盆吧～' : '花园里还没有植物，先在空盆里种下种子吧～' })
-        sfx('oops')
-        return
-      }
+      emit('toast', { icon: '🪴', text: state.profile.pots.some((x) => x.kind) ? '小植物们都盛开啦，采集种子腾个盆吧～' : '花园里还没有植物，先在空盆里种下种子吧～' })
+      sfx('oops')
+      return
     }
     const cost = freeWater ? 0 : WATER_COST
     if (cost > state.profile.coins) {
@@ -126,7 +130,7 @@ export default function Dashboard() {
     }
     const before = potId
       ? state.profile.pots.find((x) => x.id === potId)
-      : [...state.profile.pots].filter((x) => x.kind && x.pts < BLOOM_PTS).sort((a, b) => a.pts - b.pts)[0]
+      : thirstiestOf(state.profile.pots, BLOOM_PTS)
     dispatch({ type: 'WATER', cost, potId })
     sfx('water')
     if (before) {
@@ -141,10 +145,10 @@ export default function Dashboard() {
   }
 
   const harvest = (pot) => {
-    dispatch({ type: 'HARVEST', potId: pot.id, coins: 6 })
+    dispatch({ type: 'HARVEST', potId: pot.id, coins: HARVEST_COINS })
     sfx('coin')
     emitConfetti(20)
-    emit('toast', { icon: '🌼', text: `采下「${plantName(pot.kind)}」的种子，+6 金币！图鉴里已经收录` })
+    emit('toast', { icon: '🌼', text: `采下「${plantName(pot.kind)}」的种子，+${HARVEST_COINS} 金币！图鉴里已经收录` })
   }
 
   const plant = (pot, kind) => {
@@ -165,7 +169,7 @@ export default function Dashboard() {
   const stats = [
     { icon: '📝', label: '今日任务', value: `${doneToday.length}/${open.length + doneToday.length}`, sub: open.length ? `还剩 ${open.length} 件` : '全部完成！' },
     { icon: '✅', label: '习惯打卡', value: `${habitsDone}/${state.habits.length}`, sub: habitsDone === state.habits.length && state.habits.length ? '全点亮啦' : '点点更健康' },
-    { icon: '💰', label: '账本结余', value: `¥${balanceOf(state).toLocaleString()}`, sub: `本月支出 ¥${monthInOut(state).o}` },
+    { icon: '💰', label: '账本结余', value: `¥${bal.toLocaleString()}`, sub: `本月支出 ¥${io.o}` },
     { icon: '⚖️', label: '最新体重', value: w ? `${w.kg}kg` : '--', sub: w ? w.day.slice(5).replace('-', '/') : '去记录一下' },
     { icon: '💧', label: '累计浇水', value: state.profile.waterTotal, sub: `连续投入 ${state.profile.streak} 天` },
   ]
@@ -283,7 +287,7 @@ export default function Dashboard() {
                     </span>
                     <div className="pot-actions">
                       {!bloomed && <Btn size="sm" color="blue" onClick={() => water(pot.id)}>💧 浇水</Btn>}
-                      {bloomed && <Btn size="sm" color="gold" onClick={() => harvest(pot)}>🌼 采集种子 +6🪙</Btn>}
+                      {bloomed && <Btn size="sm" color="gold" onClick={() => harvest(pot)}>🌼 采集种子 +{HARVEST_COINS}🪙</Btn>}
                     </div>
                   </>
                 )}

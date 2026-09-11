@@ -1,60 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useApp } from './lib/store.jsx'
 import { gsap, useGSAP, D } from './lib/anim.js'
-import { sfx, setMuted, xpNeeded, emit, on, reward, emitConfetti } from './lib/gamify.js'
-import { CHALLENGES, challengeById, challengeNow } from './lib/challenges.js'
+import { sfx, setMuted, xpNeeded, emit, on, reward } from './lib/gamify.js'
 import { PixelSprite } from './lib/sprites.jsx'
 import { Chip, Btn, Bar, ConfirmHost } from './components/ui.jsx'
 import { ToastHost, ConfettiHost, LevelUpModal } from './components/effects.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import { pomoSubscribe, pomoStartBreak, pomoSnap } from './lib/pomo.js'
-import { webdavUpload, backupFilename, backupPayload } from './lib/webdav.js'
-import { ACHIEVEMENTS } from './lib/achievements.js'
-import { PLANT_META } from './lib/shop.js'
-import { dayKey, addDays, pickByDay, daysBetween, timeOfDay, weekKey } from './lib/dates.js'
+import { dayKey, pickByDay } from './lib/dates.js'
 import { fetchPoem } from './lib/poem.js'
-import Dashboard from './pages/Dashboard.jsx'
-import Todos from './pages/Todos.jsx'
-import Ledger from './pages/Ledger.jsx'
-import Habits from './pages/Habits.jsx'
-import News from './pages/News.jsx'
-import Study from './pages/Study.jsx'
-import English from './pages/English.jsx'
-import Weight from './pages/Weight.jsx'
-import Review from './pages/Review.jsx'
-import Museum from './pages/Museum.jsx'
+import { PAGES, HOTKEYS, TIPS, SHORT } from './lib/nav.js'
+import {
+  useDayPeriod, usePWA, useAutoBackup, useAchievements,
+  useWeeklyChallenge, useBackupNudge, usePageTitle, useNotifier,
+} from './lib/hooks.js'
 import AgentChat, { BirdAvatar } from './components/AgentChat.jsx'
 import AguVisit from './components/AguVisit.jsx'
 import IntroOverlay from './components/IntroOverlay.jsx'
-
-const PAGES = [
-  { id: 'home', icon: '🏠', label: '首页总览', comp: Dashboard },
-  { id: 'todos', icon: '📝', label: '待办清单', comp: Todos },
-  { id: 'ledger', icon: '💰', label: '收支账本', comp: Ledger },
-  { id: 'habits', icon: '✅', label: '习惯打卡', comp: Habits },
-  { id: 'news', icon: '📰', label: '每日 AI 新闻', comp: News },
-  { id: 'study', icon: '📚', label: '学习计划', comp: Study },
-  { id: 'english', icon: '🔤', label: '英语练习', comp: English },
-  { id: 'weight', icon: '⚖️', label: '体重记录', comp: Weight },
-  { id: 'review', icon: '🌙', label: '每日复盘', comp: Review },
-  { id: 'museum', icon: '🏛️', label: '小镇年鉴', comp: Museum },
-  { id: 'agent', icon: '🐣', label: '小镇精灵', comp: AgentChat },
-]
-const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-']
-// 移动端底部 Tab 用的短标签
-const SHORT = { home: '首页', todos: '待办', ledger: '账本', habits: '习惯', news: '新闻', study: '学习', english: '英语', weight: '体重', review: '复盘', museum: '年鉴', agent: '阿咕' }
-
-const TIPS = [
-  '完成任务会自动给花园浇水，每天第一次手动浇水免费。',
-  '今日 XP 达到 25 / 50 / 80 / 120 时，记得开冒险礼箱！',
-  '写一篇复盘 +15 XP，还能点亮心情月历。',
-  '答错的单词会自动住进生词本，按遗忘曲线催你复习。',
-  '盛开的植物可以「采集种子」换金币，再去商店买新花盆！',
-  '番茄钟挂在「学习计划」页，切页也会继续走。',
-  '数字键 1-9、0、- 可以快速切页。',
-  '月底记得去账本看看「钱都去哪了」，还能设预算。',
-  '把明天的第一件事写小一点，小到不可能失败。',
-]
 
 // 番茄钟迷你指示器：运行中切到别的页面时也能看到进度
 function PomoBadge({ onGo }) {
@@ -76,105 +38,40 @@ export default function App() {
   const [page, setPage] = useState('home')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
-  const [installEvt, setInstallEvt] = useState(null)
   // 每日诗词（今日题词）：poem.js 内部按日期缓存 + in-flight 去重，这里只负责把结果接进来
   const [poem, setPoem] = useState(null)
   // 首次启动引导：只在没标记过时弹一次（localStorage 记忆）
   const [showIntro, setShowIntro] = useState(() => {
     try { return !localStorage.getItem('pixel-town-seen-intro') } catch { return true }
   })
+  // 安装引导 / 昼夜 / 备份 / 成就 / 周挑战 / 标题：全部收进独立 hooks（见 lib/hooks.js）
+  const { installEvt, installUI, installApp, dismissBanner } = usePWA()
+  useDayPeriod()
+  useAutoBackup()
+  useAchievements()
+  useWeeklyChallenge()
+  usePageTitle(page)
+  useBackupNudge(state.profile.lastExportDay)
+  const notify = useNotifier()
+  const mainRef = useRef(null)
+  const levelRef = useRef(state.profile.level)
+  // 触屏滑动切页
+  const touchX = useRef(null)
+
+  // 音效开关
+  useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
+
   const closeIntro = () => {
     try { localStorage.setItem('pixel-town-seen-intro', '1') } catch { /* ignore */ }
     setShowIntro(false)
   }
-  // 安装引导：android = 浏览器给了 beforeinstallprompt（可一键装）；ios = 只能提示手动「添加到主屏幕」
-  const [installUI, setInstallUI] = useState({ show: false, mode: null })
-  const mainRef = useRef(null)
-  const levelRef = useRef(state.profile.level)
-  // 触屏滑动切页；通知开关反射（pomo 事件监听器是最早 state 的闭包）
-  const touchX = useRef(null)
-  const notifyRef = useRef(state.settings.notify)
-
-  // 音效开关
-  useEffect(() => { setMuted(!state.settings.sound) }, [state.settings.sound])
-  useEffect(() => { notifyRef.current = state.settings.notify }, [state.settings.notify])
-
-  // 小镇昼夜：按时段在 body 上打 data-period，天随钟点变（每天只重算分钟级，不需要 React 渲染）
-  useEffect(() => {
-    const apply = () => { document.body.dataset.period = timeOfDay() }
-    apply()
-    const t = setInterval(apply, 60000)
-    return () => { clearInterval(t); delete document.body.dataset.period }
-  }, [])
-
-  // WebDAV 自动备份：设置了地址且打开开关后，每天首次访问自动传一份（密钥不入档）
-  const autoBackupSent = useRef(null)
-  useEffect(() => {
-    const st = state.settings
-    if (!st.autoBackup || !st.webdavUrl || !st.webdavUser || !st.webdavPass) return
-    if (state.profile.lastAutoBackupDay === dayKey() || autoBackupSent.current === dayKey()) return
-    autoBackupSent.current = dayKey()
-    const jobs = webdavUpload({
-      url: st.webdavUrl,
-      user: st.webdavUser,
-      pass: st.webdavPass,
-      content: JSON.stringify(backupPayload(state)),
-      filename: backupFilename(),
-    })
-    jobs.then(() => {
-      dispatch({ type: 'PROFILE_SET', patch: { lastAutoBackupDay: dayKey() } })
-      emit('toast', { icon: '☁️', text: '已自动备份到网盘（含每日留档）' })
-    }).catch(() => { autoBackupSent.current = null }) // 失败不打扰，下次交互再试
-  }, [state, dispatch])
 
   // 每日诗词：首屏拉一次即可（poem.js 内部按日缓存 + in-flight 去重，跨天重新挂载会自动换新）
   useEffect(() => {
     let alive = true
-    fetchPoem(dayKey()).then((p) => { if (alive) setPoem(p) })
+    fetchPoem(dayKey()).then((p) => { if (alive) setPoem(p) }).catch(() => {})
     return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // PWA 安装提示（beforeinstallprompt 只出现一次，保存下来做成手动按钮 + 弹安装引导）
-  useEffect(() => {
-    const h = (e) => { e.preventDefault(); setInstallEvt(e); setInstallUI({ show: true, mode: 'android' }) }
-    window.addEventListener('beforeinstallprompt', h)
-    // 安装完成（或浏览器决定不再可安装）→ 关掉引导
-    const done = () => { setInstallEvt(null) }
-    window.addEventListener('appinstalled', done)
-    return () => { window.removeEventListener('beforeinstallprompt', h); window.removeEventListener('appinstalled', done) }
-  }, [])
-
-  // 安装引导横幅：已安装 / 用户关过的不再出现；iOS 没有 beforeinstallprompt，延迟几秒给手动指引
-  const dismissBanner = () => {
-    try { localStorage.setItem('pixel-town-install-skip', '1') } catch { /* ignore */ }
-    setInstallUI({ show: false, mode: null })
-  }
-  useEffect(() => {
-    const standalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
-    if (standalone()) return
-    try { if (localStorage.getItem('pixel-town-install-skip')) return } catch { /* ignore */ }
-    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '')
-    const t = setTimeout(() => { if (iOS && !installEvt) setInstallUI({ show: true, mode: 'ios' }) }, 4000)
-    return () => clearTimeout(t)
-  }, [installEvt])
-
-  const installApp = async () => {
-    if (!installEvt) return
-    installEvt.prompt()
-    await installEvt.userChoice
-    setInstallEvt(null)
-    dismissBanner()
-  }
-
-  // 系统通知：只在用户设置里开了开关且授权后才会弹（soft opt-in，绝不主动打扰）
-  const notify = (title, body) => {
-    try {
-      if (notifyRef.current && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, tag: 'pomo', icon: 'icon.svg' })
-      }
-    } catch { /* 通知不可用时静默 */ }
-  }
 
   const onTouchStart = (e) => { touchX.current = e.touches[0].clientX }
   const onTouchEnd = (e) => {
@@ -205,7 +102,7 @@ export default function App() {
     reward(dispatch, { xp, coins, msg: `专注 ${min} 分钟`, icon: '🍅', confetti: true })
     pomoStartBreak()
     emit('toast', { icon: '☕', text: `休息 ${pomoSnap().total / 60} 分钟，阿咕替你看着钟` })
-  }), [dispatch]) // dispatch 引用稳定，监听器只注册一次；notify/notifyRef 通过 ref 读取永远是最新的
+  }), [dispatch, notify]) // dispatch/notify 引用稳定，监听器只注册一次
 
   // 升级检测
   useEffect(() => {
@@ -215,62 +112,6 @@ export default function App() {
     }
     levelRef.current = state.profile.level
   }, [state.profile.level])
-
-  // 成就检测：内置 + 自定义计数型，每次状态变化跑一遍纯函数判定，解锁的发金币 + 喜报
-  useEffect(() => {
-    const unlocked = state.profile.achievements || {}
-    for (const a of ACHIEVEMENTS) {
-      if (!unlocked[a.id] && a.check(state, PLANT_META.length)) {
-        dispatch({ type: 'ACH_UNLOCK', id: a.id, coins: a.coins })
-        sfx('coin')
-        emit('toast', { icon: '🏆', text: `解锁成就「${a.name}」！+${a.coins} 金币` })
-      }
-    }
-    for (const c of state.profile.customAch || []) {
-      if (c.metric === 'manual') continue
-      const val = c.metric === 'streak' ? state.profile.streak : (state.profile.stats?.[c.metric] || 0)
-      if (!unlocked[c.id] && val >= c.target) {
-        dispatch({ type: 'ACH_UNLOCK', id: c.id, coins: c.coins })
-        sfx('coin')
-        emit('toast', { icon: '🏆', text: `解锁成就「${c.name}」！+${c.coins} 金币` })
-      }
-    }
-  }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 每周挑战：周一自动换一个（不重复上周）；本周达成后自动发金币
-  useEffect(() => {
-    const wk = weekKey()
-    const w = state.profile.weekly || {}
-    if (w.week === wk && w.id) return
-    const prevId = w.week === addDays(wk, -7) ? w.id : ''
-    const pool = CHALLENGES.filter((c) => c.id !== prevId)
-    const ch = pool[Math.floor(Math.random() * pool.length)]
-    dispatch({ type: 'PROFILE_SET', patch: { weekly: { week: wk, id: ch.id, claimed: false } } })
-  }, [state.profile.weekly]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const w = state.profile.weekly || {}
-    if (!w.id || w.claimed || w.week !== weekKey()) return
-    const ch = challengeById(w.id)
-    if (ch && challengeNow(ch, state) >= ch.max) {
-      dispatch({ type: 'CHALLENGE_CLAIM', coins: ch.coins })
-      sfx('levelup')
-      emitConfetti(30)
-      emit('toast', { icon: ch.icon, text: `本周挑战「${ch.name}」达成！+${ch.coins} 金币` })
-      notify(`本周挑战达成 🎉`, `「${ch.name}」完成，${ch.coins} 金币已入库`)
-    }
-  }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 备份提醒：从没导出过 / 超过 7 天没导出，进首页轻声提一句
-  useEffect(() => {
-    const last = state.profile.lastExportDay
-    if (!last || daysBetween(last, dayKey()) >= 7) {
-      const timer = setTimeout(() => {
-        emit('toast', { icon: '💾', text: '很久没备份啦，去设置「导出备份」放进坚果云同步文件夹，防丢还有云端一份' })
-      }, 2500)
-      return () => clearTimeout(timer)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 键盘快捷键：数字键切页（输入框/弹窗打开时不劫持）
   useEffect(() => {
@@ -320,33 +161,6 @@ export default function App() {
 
   // 切页回顶部
   useEffect(() => { window.scrollTo({ top: 0 }) }, [page])
-
-  // 标签页标题：挂后台也能看出在哪页、番茄钟还剩多久
-  const pageRef = useRef(page)
-  useEffect(() => { pageRef.current = page }, [page])
-  useEffect(() => {
-    const pageTitle = () => {
-      const p = PAGES.find((x) => x.id === pageRef.current)
-      document.title = `${p.icon} ${p.label} · 拾光小镇`
-    }
-    pageTitle()
-    return pomoSubscribe((s) => {
-      if (s.running || s.left !== s.total) {
-        const mm = String(Math.floor(s.left / 60)).padStart(2, '0')
-        const ss = String(s.left % 60).padStart(2, '0')
-        document.title = `${s.mode === 'break' ? '☕' : '🍅'} ${mm}:${ss} ${s.mode === 'break' ? '休息' : '专注'}中 · 拾光小镇`
-      } else {
-        pageTitle()
-      }
-    })
-  }, [])
-  // 空闲时切页刷新标题；番茄钟进行中则让位给倒计时标题（由上面的订阅者持续刷新）
-  useEffect(() => {
-    const s = pomoSnap()
-    if (s.running || s.left !== s.total) return
-    const p = PAGES.find((x) => x.id === page)
-    document.title = `${p.icon} ${p.label} · 拾光小镇`
-  }, [page])
 
   const { profile } = state
   const need = xpNeeded(profile.level)

@@ -4,28 +4,33 @@ import { Panel, Btn, Chip, Empty } from '../components/ui.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { Bars } from '../lib/charts.jsx'
 import { REWARDS, reward, sfx, emit } from '../lib/gamify.js'
+import { aggregate } from '../lib/weekly.js'
 import { dayKey, parseKey, monthKey, fmtShort, WEEKDAYS, addDays } from '../lib/dates.js'
 
 const MOODS = ['超棒', '开心', '平静', '低落', '难过']
 const MOOD_SPRITES = ['mood0', 'mood1', 'mood2', 'mood3', 'mood4']
 
 // 每周小结：按所选周忠实汇总小镇数据（周一起始，可回看前几周）
+// 聚合口径复用 weekly.js 的 aggregate（与 Museum 周报同一份真相），按天各聚合一次
 function WeeklyReport({ state }) {
   const [off, setOff] = useState(0) // 0 = 本周，1 = 上周……
   const t = dayKey()
   const dow = (parseKey(t).getDay() + 6) % 7 // 周一 = 0
   const from = addDays(t, -dow - off * 7)
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i))
-  const dayStats = days.map((d) => ({
-    d,
-    xp: state.xpLog?.[d] || 0,
-    active: (state.xpLog?.[d] || 0) > 0,
-    todosDone: state.todos.filter((x) => (x.done && x.day === d) || (x.repeat && x.lastDone === d)).length,
-    min: state.study.reduce((m, p) => m + p.sessions.filter((s) => s.day === d).reduce((n, s) => n + s.min, 0), 0),
-    out: state.ledger.filter((e) => e.day === d && e.type === 'out').reduce((m, e) => m + e.amount, 0),
-    inc: state.ledger.filter((e) => e.day === d && e.type === 'in').reduce((m, e) => m + e.amount, 0),
-    mood: state.reviews?.[d]?.mood ?? null,
-  }))
+  const dayStats = days.map((d) => {
+    const a = aggregate(state, [d])
+    return {
+      d,
+      xp: a.xp,
+      active: a.xp > 0,
+      todosDone: a.todos,
+      min: a.focusMin,
+      out: a.expense,
+      inc: a.income,
+      mood: state.reviews?.[d]?.mood ?? null,
+    }
+  })
   const sum = (k) => dayStats.reduce((m, x) => m + x[k], 0)
   const activeDays = dayStats.filter((x) => x.active).length
   const best = dayStats.some((x) => x.mood != null)

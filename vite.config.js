@@ -17,6 +17,7 @@ export default defineConfig({
   preview: { host: true, https },
   test: {
     environment: 'jsdom',
+    setupFiles: ['src/test/setup.js'],
     coverage: {
       provider: 'v8',
       include: ['src/lib/**'],

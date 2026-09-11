@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useApp, balanceOf, monthInOut } from '../lib/store.jsx'
-import { Panel, Btn, Empty, Chip } from '../components/ui.jsx'
+import { Panel, Btn, Empty, Chip, LazyInput } from '../components/ui.jsx'
 import { Bars } from '../lib/charts.jsx'
 import { sfx, emit } from '../lib/gamify.js'
 import { dayKey, monthKey, fmtShort } from '../lib/dates.js'
@@ -93,10 +93,10 @@ export default function Ledger() {
     return (
       <div key={c} className="budget-row">
         <span className="budget-cat">{catIcon(c)} {c}</span>
-        <input
+        <LazyInput
           type="number" min="0" placeholder="预算 ¥"
           value={budget || ''}
-          onChange={(e) => setBudget(c, e.target.value)}
+          onCommit={(v) => setBudget(c, v)}
         />
         {budget ? (
           <div className={`budget-bar ${over ? 'over' : ''}`}>

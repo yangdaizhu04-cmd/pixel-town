@@ -19,6 +19,12 @@ export const POT_GOODS = [
   { id: 'pot-5', name: '第五个花盆', cost: 120, desc: '花园再扩一格' },
 ]
 
+// ---------- 选盆「单一真相」：UI 预检（Dashboard）与落库（store 的 WATER/GRANT）共用 ----------
+// 可生长的盆 = 种了植物且还没盛开
+export const growersOf = (pots, bloomPts) => (pots || []).filter((x) => x.kind && x.pts < bloomPts)
+// 最缺水的盆 = 可生长的盆里 pts 最低的那盆；没有可浇的返回 null
+export const thirstiestOf = (pots, bloomPts) => [...growersOf(pots, bloomPts)].sort((x, y) => x.pts - y.pts)[0] || null
+
 export const DECOR_GOODS = [
   { id: 'fence', name: '小篱笆', cost: 50, desc: '围出一片小花园' },
   { id: 'scare', name: '稻草人', cost: 80, desc: '麻雀来了也不怕' },

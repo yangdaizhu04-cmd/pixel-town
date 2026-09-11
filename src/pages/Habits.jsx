@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp, habitStreak } from '../lib/store.jsx'
 import { Panel, Btn, Empty, Chip, confirmBox } from '../components/ui.jsx'
 import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx } from '../lib/gamify.js'
@@ -17,7 +17,7 @@ export default function Habits() {
   const days = lastNDays(7, addDays(dayKey(), -weekOffset * 7))
   const t = dayKey()
 
-  const doneToday = state.habits.filter((h) => h.days[t]).length
+  const doneToday = useMemo(() => state.habits.filter((h) => h.days[t]).length, [state.habits, t])
 
   const add = () => {
     const n = name.trim()

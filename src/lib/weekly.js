@@ -3,7 +3,8 @@
 import { dayKey, addDays, weekSpan } from './dates.js'
 
 // 把 state 中落在 days 里的数据聚成一份指标
-const aggregate = (state, days) => {
+// （导出供 Review 页的每周小结按天复用：聚合口径只此一份，改字段只动这里）
+export const aggregate = (state, days) => {
   const set = new Set(days)
   const todos = state.todos.filter((x) => (x.done && set.has(x.day)) || (x.repeat && set.has(x.lastDone))).length
   const habits = state.habits.reduce((m, h) => m + Object.keys(h.days || {}).filter((d) => set.has(d)).length, 0)

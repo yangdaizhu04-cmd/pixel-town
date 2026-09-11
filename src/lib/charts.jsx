@@ -44,7 +44,7 @@ export function Bars({ data, rows = 10, scale = 7, color = 'green', fmt }) {
       {n > 0 && (
         <div className="bars-labels" style={{ gridTemplateColumns: `repeat(${n}, ${scale}px)` }}>
           {data.map((d, i) => (
-            <div key={i} className="bars-label" title={`${d.label}：${fmt ? fmt(d.value) : d.value}`}>
+            <div key={`${d.label}-${i}`} className="bars-label" title={`${d.label}：${fmt ? fmt(d.value) : d.value}`}>
               <span>{d.label}</span>
               <em>{fmt ? fmt(d.value) : d.value}</em>
             </div>

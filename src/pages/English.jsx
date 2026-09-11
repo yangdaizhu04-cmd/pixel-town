@@ -7,7 +7,15 @@ import { speak } from '../lib/tts.js'
 import { WORDS } from '../lib/words.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
 
-const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5)
+// Fisher-Yates 洗牌：sort(() => Math.random() - 0.5) 的概率分布有偏，选项位置会系统性扎堆
+const shuffle = (arr) => {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
 // 词单行格式：单词[,词性][,中文][,例句]（逗号/中文逗号/Tab 均可）
 const parseWordLine = (line) => {
   const parts = line.split(/[,，\t]/).map((x) => x.trim()).filter(Boolean)

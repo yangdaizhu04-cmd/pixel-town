@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useApp, lastWeight, bmiOf } from '../lib/store.jsx'
-import { Panel, Btn, Chip, Empty, Field } from '../components/ui.jsx'
+import { Panel, Btn, Chip, Empty, Field, LazyInput } from '../components/ui.jsx'
 import { Line } from '../lib/charts.jsx'
 import { REWARDS, reward, sfx, emit } from '../lib/gamify.js'
 import { dayKey, fmtShort } from '../lib/dates.js'
@@ -38,9 +38,10 @@ export default function Weight() {
   }
 
   const setGoal = (v) => {
+    // 中间态（如刚打下个「6」）不落库也不清空，等打完；只有合法值或整格清空才更新
+    if (v === '') { dispatch({ type: 'PROFILE_SET', patch: { weightGoal: null } }); sfx('pop'); return }
     const num = +v
-    dispatch({ type: 'PROFILE_SET', patch: { weightGoal: num >= 20 && num <= 300 ? num : null } })
-    sfx('pop')
+    if (num >= 20 && num <= 300) { dispatch({ type: 'PROFILE_SET', patch: { weightGoal: num } }); sfx('pop') }
   }
 
   const bmiLabel = bmi == null ? '' : bmi < 18.5 ? '偏轻' : bmi < 24 ? '正好' : bmi < 28 ? '偏重' : '该动动了'
@@ -84,7 +85,7 @@ export default function Weight() {
         </div>
         <div className="form-row">
           <Field label="目标体重 kg（可选，画在曲线里）">
-            <input type="number" step="0.1" placeholder={goal ? `${goal}` : '比如 62'} aria-label="目标体重（kg）" value={goal ?? ''} onChange={(e) => setGoal(e.target.value)} />
+            <LazyInput type="number" step="0.1" placeholder={goal ? `${goal}` : '比如 62'} aria-label="目标体重（kg）" value={goal ?? ''} onCommit={setGoal} />
           </Field>
         </div>
         <p className="muted">数字只是参考，好好吃饭、好好睡觉比什么都重要 🌙</p>

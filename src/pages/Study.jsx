@@ -272,7 +272,7 @@ export default function Study() {
                     <summary>最近记录（{p.sessions.length} 次）</summary>
                     <ul>
                       {[...p.sessions].reverse().slice(0, 6).map((x, i) => (
-                        <li key={i}><b>{fmtShort(x.day)}</b> · {x.min} 分钟{x.note ? ` · ${x.note}` : ''}</li>
+                        <li key={`${x.day}-${x.min}-${i}`}><b>{fmtShort(x.day)}</b> · {x.min} 分钟{x.note ? ` · ${x.note}` : ''}</li>
                       ))}
                     </ul>
                   </details>

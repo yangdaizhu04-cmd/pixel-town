@@ -87,6 +87,35 @@ export function Field({ label, children }) {
   )
 }
 
+// 带提交缓冲的输入框：打字中间态留在本地，停顿 300ms / 回车 / 失焦才提交 onCommit。
+// 用于预算、目标体重这类「onChange 直接 dispatch」的字段——否则每敲一个键就是
+// 一次全局 dispatch → 全树重渲染 + 全量 localStorage 序列化。
+export function LazyInput({ value, onCommit, ...rest }) {
+  const [v, setV] = useState(value ?? '')
+  const latest = useRef(v)
+  const timer = useRef(null)
+  useEffect(() => { setV(value ?? '') }, [value]) // 外部变更（导入/重置）时同步回显
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const commit = () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    onCommit(latest.current)
+  }
+  return (
+    <input
+      {...rest}
+      value={v}
+      onChange={(e) => {
+        latest.current = e.target.value
+        setV(e.target.value)
+        clearTimeout(timer.current)
+        timer.current = setTimeout(commit, 300)
+      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
+      onBlur={() => { if (timer.current) commit() }}
+    />
+  )
+}
+
 // ---------- 像素风确认框（替换原生 confirm，Promise 用法与 window.confirm 对齐） ----------
 // const ok = await confirmBox({ title, message, danger })
 export function confirmBox({ title = '确认一下', message = '', danger = false, okText = '确定' }) {
@@ -95,11 +124,17 @@ export function confirmBox({ title = '确认一下', message = '', danger = fals
 
 export function ConfirmHost() {
   const [cur, setCur] = useState(null)
-  useEffect(() => on('confirm', (e) => setCur(e.detail)), [])
+  const curRef = useRef(null) // 并发的第二个 confirm 进来时，先把前一个的 Promise 放行（视为取消），不让它永远悬空
+  useEffect(() => on('confirm', (e) => {
+    if (curRef.current) curRef.current.resolve(false)
+    curRef.current = e.detail
+    setCur(e.detail)
+  }), [])
   const close = (val) => {
-    if (!cur) return
+    if (!curRef.current) return
     setCur(null)
-    cur.resolve(val)
+    curRef.current.resolve(val)
+    curRef.current = null
   }
   return (
     <Modal open={!!cur} onClose={() => close(false)} title={cur?.title || '确认一下'}>

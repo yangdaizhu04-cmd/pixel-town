@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
+import { createContext, useContext, useEffect, useReducer, useRef } from 'react'
 import { dayKey, addDays, monthKey, daysBetween } from './dates.js'
 import { xpNeeded, emit } from './gamify.js'
 import { WORDS } from './words.js'
+import { thirstiestOf, growersOf } from './shop.js'
 
 // ---------- 植物生长 ----------
 export const STAGE_PTS = [0, 2, 5, 9, 14]
@@ -15,6 +16,13 @@ export const stageOf = (pts) => {
 
 const LS_KEY = 'pixel-town-save-v1'
 const uid = () => Math.random().toString(36).slice(2, 9)
+
+// 数据封顶：每次 state 变化都会全量 JSON.stringify 写 localStorage（250ms 防抖），
+// 无界数组会让保存成本随使用时间线性上涨。上限刻意给得极宽裕（正常使用触不到），
+// 只在极端情况下裁掉最旧的，导出备份同样受此口径约束。
+const MAX_LEDGER = 4000 // 约 10 年的每天一笔
+const MAX_REVIEWS = 500 // 约 1.5 年的每日复盘
+const MAX_WEIGHTS = 2000 // 约 5 年的每日上秤
 
 // ---------- 种子数据（首次打开是一座干净的空小镇；所有记录都靠自己动手，没有演示假数据） ----------
 // 曾经这里预置过全套演示数据（演示账目/待办/习惯/体重/复盘等），造成「没记过却有数据、删了又回」的困惑
@@ -70,7 +78,7 @@ export function seed() {
     reviews: {},
     news: { cachedAt: 0, items: [], source: '' },
     chat: [
-      { role: 'assistant', content: '咕咕！我是阿咕，小镇的管家精灵 🐣\n可以问我「今天还剩几件事」「这个月花了多少」，或者直接说「帮我记一条待办：明天交报告」～' },
+      { id: 'hello', role: 'assistant', content: '咕咕！我是阿咕，小镇的管家精灵 🐣\n可以问我「今天还剩几件事」「这个月花了多少」，或者直接说「帮我记一条待办：明天交报告」～' },
     ],
     settings: {
       apiKey: '',
@@ -151,6 +159,11 @@ export function hydrate(parsed) {
   s.english.queue = (s.english.queue || [])
     .filter((q) => q && typeof q === 'object' && typeof q.w === 'string' && q.w)
     .map((q) => ({ ...q, interval: q.interval || 0, due: q.due || dayKey() }))
+  // 聊天消息 id 兜底：旧档没有 id，回填后列表才能用稳定 key 渲染
+  s.chat = (s.chat || []).map((m) => (m.id ? m : { ...m, id: uid() }))
+  // 历史超限数据的写入时裁剪（旧档一次性裁到位，口径与 reducer 封顶一致）
+  s.ledger = (s.ledger || []).slice(0, MAX_LEDGER)
+  s.weights = (s.weights || []).slice(-MAX_WEIGHTS)
   return s
 }
 
@@ -183,8 +196,8 @@ export function reducer(s, a) {
       }
       // 自动浇水：完成事情会让花园长一点；若因此盛开，顺手记进图鉴
       const pots = P.pots.map((x) => ({ ...x }))
-      const target = [...pots].filter((x) => x.kind).sort((x, y) => x.pts - y.pts)[0]
-      if (target && target.pts < BLOOM_PTS) {
+      const target = thirstiestOf(pots, BLOOM_PTS)
+      if (target) {
         target.pts += 1
         if (target.pts >= BLOOM_PTS && !(P.collection || []).includes(target.kind)) {
           P.collection = [...(P.collection || []), target.kind]
@@ -210,9 +223,8 @@ export function reducer(s, a) {
     case 'WATER': {
       if ((a.cost || 0) > P.coins) return s
       const pots = P.pots.map((x) => ({ ...x }))
-      // 指定 potId 只浇那一盆；否则自动挑最缺水（pts 最低）的一盆；已盛开的盆不再被浇
-      const growers = pots.filter((x) => x.kind && x.pts < BLOOM_PTS)
-      const target = a.potId ? growers.find((x) => x.id === a.potId) : growers.sort((x, y) => x.pts - y.pts)[0]
+      // 指定 potId 只浇那一盆；否则自动挑最缺水的一盆（选盆逻辑与 Dashboard 预检共用 shop.js 的实现）
+      const target = a.potId ? growersOf(pots, BLOOM_PTS).find((x) => x.id === a.potId) : thirstiestOf(pots, BLOOM_PTS)
       if (target) {
         target.pts += 1
         if (target.pts >= BLOOM_PTS && !(P.collection || []).includes(target.kind)) {
@@ -346,7 +358,7 @@ export function reducer(s, a) {
     case 'LEDGER_ADD':
       return {
         ...s,
-        ledger: [{ id: uid(), day: a.day || t, type: a.dir, amount: a.amount, cat: a.cat, note: a.note || '' }, ...s.ledger],
+        ledger: [{ id: uid(), day: a.day || t, type: a.dir, amount: a.amount, cat: a.cat, note: a.note || '' }, ...s.ledger].slice(0, MAX_LEDGER),
         profile: { ...P, stats: { ...P.stats, ledger: (P.stats?.ledger || 0) + 1 } },
       }
     case 'LEDGER_DEL':
@@ -450,19 +462,27 @@ export function reducer(s, a) {
     // ---------- 体重 ----------
     case 'WEIGHT_ADD': {
       const rest = s.weights.filter((x) => x.day !== a.day)
-      return { ...s, weights: [...rest, { day: a.day, kg: a.kg }].sort((x, y) => (x.day < y.day ? -1 : 1)) }
+      return { ...s, weights: [...rest, { day: a.day, kg: a.kg }].sort((x, y) => (x.day < y.day ? -1 : 1)).slice(-MAX_WEIGHTS) }
     }
     case 'WEIGHT_DEL':
       return { ...s, weights: s.weights.filter((x) => x.day !== a.day) }
 
-    case 'REVIEW_SAVE':
-      return { ...s, reviews: { ...s.reviews, [a.day]: { mood: a.mood, good: a.good, thanks: a.thanks, tomorrow: a.tomorrow } } }
+    case 'REVIEW_SAVE': {
+      const reviews = { ...s.reviews, [a.day]: { mood: a.mood, good: a.good, thanks: a.thanks, tomorrow: a.tomorrow } }
+      const keys = Object.keys(reviews)
+      if (keys.length > MAX_REVIEWS) {
+        // 日期 key 排序后裁掉最早的，封顶见 MAX_REVIEWS 注释
+        for (const k of keys.sort().slice(0, keys.length - MAX_REVIEWS)) delete reviews[k]
+      }
+      return { ...s, reviews }
+    }
 
     case 'NEWS_SET':
       return { ...s, news: { cachedAt: a.cachedAt, items: a.items, source: a.source } }
 
     case 'CHAT_ADD': {
-      const chat = [...s.chat, { role: a.role, content: a.content, t: Date.now() }]
+      // id 用作列表 key：满 80 条开始滑动裁剪后，index key 会让整个列表卸载重挂
+      const chat = [...s.chat, { id: a.id || uid(), role: a.role, content: a.content, t: Date.now() }]
       return { ...s, chat: chat.slice(-80) }
     }
     case 'CHAT_CLEAR':
@@ -492,7 +512,8 @@ export function reducer(s, a) {
   }
 }
 
-const Ctx = createContext(null)
+const StateCtx = createContext(null)
+const DispatchCtx = createContext(null)
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, null, load)
@@ -519,15 +540,22 @@ export function AppProvider({ children }) {
     document.addEventListener('visibilitychange', onVis)
     return () => {
       window.removeEventListener('beforeunload', flush)
-      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('visibilitychange', onVis)
       clearTimeout(timer.current)
     }
   }, [])
-  const value = useMemo(() => ({ state, dispatch }), [state])
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+  // state 与 dispatch 分两个 Context：dispatch 引用永远稳定，只需要发动作的组件
+  // （用 useDispatch）订阅 DispatchCtx，就不会被任何 state 变化牵连重渲染
+  return (
+    <DispatchCtx.Provider value={dispatch}>
+      <StateCtx.Provider value={state}>{children}</StateCtx.Provider>
+    </DispatchCtx.Provider>
+  )
 }
 
-export const useApp = () => useContext(Ctx)
+export const useApp = () => ({ state: useContext(StateCtx), dispatch: useContext(DispatchCtx) })
+// 只要发动作、不读数据的组件用它：state 变化不再牵连重渲染
+export const useDispatch = () => useContext(DispatchCtx)
 
 // ---------- 常用查询 ----------
 // 待办是否「今天该出现」：普通待办看 day，重复待办看 lastDone
