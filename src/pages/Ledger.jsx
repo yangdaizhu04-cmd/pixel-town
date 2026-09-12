@@ -202,7 +202,7 @@ export default function Ledger() {
                   <span className="ledger-note">{e.note || e.cat}</span>
                   <Chip className={CAT_COLORS[e.cat] ? `c-${CAT_COLORS[e.cat]}` : ''}>{e.cat}</Chip>
                   <span className="ledger-amount">{e.type === 'in' ? '+' : '−'}¥{e.amount}</span>
-                  <button className="del" title="删除" onClick={() => { dispatch({ type: 'LEDGER_DEL', id: e.id }); sfx('oops') }}>×</button>
+                  <button className="del" title="删除" onClick={() => { dispatch({ type: 'LEDGER_DEL', id: e.id }); sfx('oops'); emit('toast', { icon: '🗑️', text: '已移入回收站，30 天内可在设置 → 数据里恢复' }) }}>×</button>
                 </li>
               ))}
             </ul>

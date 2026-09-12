@@ -290,3 +290,129 @@ describe('gamify：难度/盲盒/升级曲线', () => {
     expect(xpNeeded(3)).toBe(140)
   })
 })
+
+describe('v0.7.0：记录级 updatedAt / 回收站 / 月度目标', () => {
+  const today = dayKey()
+
+  it('TODO_ADD / LEDGER_ADD 盖上 updatedAt（同步合并的依据）', () => {
+    let s = seed()
+    s = reducer(s, { type: 'TODO_ADD', text: 'x' })
+    expect(s.todos[0].updatedAt).toBeGreaterThan(0)
+    s = reducer(s, { type: 'LEDGER_ADD', dir: 'out', amount: 10, cat: '餐饮' })
+    expect(s.ledger[0].updatedAt).toBeGreaterThan(0)
+  })
+
+  it('reducer 外壳把被触碰的切片记进 _touched（KV 同步用），没碰的不记', () => {
+    let s = seed()
+    s = reducer(s, { type: 'TODO_ADD', text: 'x' })
+    expect(s._touched.todos).toBeGreaterThan(0)
+    expect(s._touched.profile).toBeUndefined()
+    s = reducer(s, { type: 'GRANT', xp: 5, coins: 1 })
+    expect(s._touched.profile).toBeGreaterThan(0)
+  })
+
+  it('TODO_DEL 移入回收站（软删除），TRASH_RESTORE 放回且墓碑保留恢复标记', () => {
+    let s = seed()
+    s = reducer(s, { type: 'TODO_ADD', text: '误删的' })
+    const id = s.todos[0].id
+    s = reducer(s, { type: 'TODO_DEL', id })
+    expect(s.todos).toHaveLength(0)
+    expect(s.trash).toHaveLength(1)
+    expect(s.trash[0]).toMatchObject({ kind: 'todo', refId: id, restoredAt: 0 })
+    s = reducer(s, { type: 'TRASH_RESTORE', id: s.trash[0].id })
+    expect(s.todos).toHaveLength(1)
+    expect(s.todos[0].id).toBe(id)
+    expect(s.trash[0].restoredAt).toBeGreaterThan(0)
+  })
+
+  it('TRASH_RESTORE 幂等：已恢复的条目再恢复一次不变', () => {
+    let s = seed()
+    s = reducer(s, { type: 'TODO_ADD', text: 'a' })
+    s = reducer(s, { type: 'TODO_DEL', id: s.todos[0].id })
+    s = reducer(s, { type: 'TRASH_RESTORE', id: s.trash[0].id })
+    const once = s
+    s = reducer(s, { type: 'TRASH_RESTORE', id: s.trash[0].id })
+    expect(s).toBe(once)
+  })
+
+  it('TODO_CLEAR_ALL_DONE 批量入回收站', () => {
+    let s = seed()
+    s = reducer(s, { type: 'TODO_ADD', text: 'a' })
+    s = reducer(s, { type: 'TODO_ADD', text: 'b' })
+    s = reducer(s, { type: 'TODO_TOGGLE', id: s.todos[0].id })
+    s = reducer(s, { type: 'TODO_TOGGLE', id: s.todos[1].id })
+    s = reducer(s, { type: 'TODO_CLEAR_ALL_DONE' })
+    expect(s.todos).toHaveLength(0)
+    expect(s.trash).toHaveLength(2)
+  })
+
+  it('账单 / 习惯 / 学习计划 / 体重删除都先进回收站；体重墓碑 refId 是 day', () => {
+    let s = seed()
+    s = reducer(s, { type: 'LEDGER_ADD', dir: 'out', amount: 5, cat: '餐饮' })
+    s = reducer(s, { type: 'LEDGER_DEL', id: s.ledger[0].id })
+    s = reducer(s, { type: 'HABIT_ADD', name: '喝水', icon: '💧' })
+    s = reducer(s, { type: 'HABIT_DEL', id: s.habits[0].id })
+    s = reducer(s, { type: 'STUDY_ADD', title: 'React' })
+    s = reducer(s, { type: 'STUDY_DEL', id: s.study[0].id })
+    s = reducer(s, { type: 'WEIGHT_ADD', day: today, kg: 65 })
+    s = reducer(s, { type: 'WEIGHT_DEL', day: today })
+    expect(s.trash.map((x) => x.kind).sort()).toEqual(['habit', 'ledger', 'study', 'weight'])
+    expect(s.trash.find((x) => x.kind === 'weight').refId).toBe(today)
+  })
+
+  it('TRASH_PURGE / TRASH_EMPTY 彻底清除', () => {
+    let s = seed()
+    s = reducer(s, { type: 'TODO_ADD', text: 'a' })
+    s = reducer(s, { type: 'TODO_DEL', id: s.todos[0].id })
+    s = reducer(s, { type: 'TODO_ADD', text: 'b' })
+    s = reducer(s, { type: 'TODO_DEL', id: s.todos[0].id })
+    s = reducer(s, { type: 'TRASH_PURGE', id: s.trash[0].id })
+    expect(s.trash).toHaveLength(1)
+    s = reducer(s, { type: 'TRASH_EMPTY' })
+    expect(s.trash).toHaveLength(0)
+  })
+
+  it('hydrate：超期（30 天前）的回收站条目自动清理，新的保留', () => {
+    const s = hydrate({
+      profile: { name: 'x' },
+      trash: [
+        { id: 't-old', kind: 'todo', refId: 'a', data: { id: 'a' }, deletedAt: Date.now() - 31 * 86400000, updatedAt: Date.now() - 31 * 86400000 },
+        { id: 't-new', kind: 'todo', refId: 'b', data: { id: 'b' }, deletedAt: Date.now() - 3 * 86400000, updatedAt: Date.now() - 3 * 86400000 },
+      ],
+    })
+    expect(s.trash.map((x) => x.id)).toEqual(['t-new'])
+  })
+
+  it('hydrate：旧档 weights 补 id=day、各切片补 updatedAt=0', () => {
+    const s = hydrate({
+      profile: { name: 'x' },
+      todos: [{ id: 'a', text: '老待办' }],
+      weights: [{ day: '2026-09-09', kg: 60 }],
+      reviews: { '2026-09-09': { mood: 1 } },
+    })
+    expect(s.todos[0].updatedAt).toBe(0)
+    expect(s.weights[0]).toMatchObject({ id: '2026-09-09', updatedAt: 0 })
+    expect(s.reviews['2026-09-09'].updatedAt).toBe(0)
+  })
+
+  it('GOAL_ADD / GOAL_TOGGLE / GOAL_DEL：目标带月份与时间戳，删除进回收站', () => {
+    let s = seed()
+    s = reducer(s, { type: 'GOAL_ADD', text: '读完第一章' })
+    const g = s.goals[0]
+    expect(g).toMatchObject({ text: '读完第一章', month: today.slice(0, 7), done: false })
+    s = reducer(s, { type: 'GOAL_TOGGLE', id: g.id })
+    expect(s.goals[0].done).toBe(true)
+    expect(s.goals[0].doneAt).toBeGreaterThan(0)
+    s = reducer(s, { type: 'GOAL_TOGGLE', id: g.id })
+    expect(s.goals[0].done).toBe(false)
+    s = reducer(s, { type: 'GOAL_DEL', id: g.id })
+    expect(s.goals).toHaveLength(0)
+    expect(s.trash[0]).toMatchObject({ kind: 'goal', refId: g.id })
+  })
+
+  it('REVIEW_SAVE 存下 ask（每日一问的答案）并盖时间戳', () => {
+    let s = seed()
+    s = reducer(s, { type: 'REVIEW_SAVE', day: today, mood: 2, good: '', thanks: '', tomorrow: '', ask: '喝够水了' })
+    expect(s.reviews[today]).toMatchObject({ ask: '喝够水了', updatedAt: expect.any(Number) })
+  })
+})

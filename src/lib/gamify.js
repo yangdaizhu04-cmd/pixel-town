@@ -16,6 +16,7 @@ export const REWARDS = {
   english: { xp: 4, coins: 1 },
   weight: { xp: 5, coins: 2 },
   review: { xp: 15, coins: 5 },
+  goal: { xp: 30, coins: 15 }, // 月度目标达成（大目标给大奖；撤销不发也不追回，宽恕优先）
 }
 
 // ---------- 任务难度（做难事和划水终于有区别了） ----------

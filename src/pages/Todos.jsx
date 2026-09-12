@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useApp, todosOpen, todosDoneToday } from '../lib/store.jsx'
 import { Panel, Btn, Bar, Empty, Chip, confirmBox } from '../components/ui.jsx'
-import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx } from '../lib/gamify.js'
+import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx, emit } from '../lib/gamify.js'
 import { dayKey, addDays } from '../lib/dates.js'
 
 const CATS = [
@@ -119,7 +119,7 @@ export default function Todos() {
                 <Btn size="sm" onClick={() => postpone(td, addDays(t, 1))} title="明天再说，也挺好的">⏭ 明天</Btn>
               )}
               <Chip>{catIcon(td.cat)} {td.cat}</Chip>
-              <button className="del" title="删除" onClick={() => { dispatch({ type: 'TODO_DEL', id: td.id }); sfx('oops') }}>×</button>
+              <button className="del" title="删除" onClick={() => { dispatch({ type: 'TODO_DEL', id: td.id }); sfx('oops'); emit('toast', { icon: '🗑️', text: '已移入回收站，30 天内可在设置 → 数据里恢复' }) }}>×</button>
             </li>
           ))}
         </ul>
@@ -129,12 +129,12 @@ export default function Todos() {
         title="今日已完成" icon="🎉"
         extra={done.length > 0 && (
           <div className="btn-row">
-            <Btn size="sm" onClick={() => dispatch({ type: 'TODO_CLEAR_DONE' })}>清空今日记录</Btn>
+            <Btn size="sm" onClick={() => { dispatch({ type: 'TODO_CLEAR_DONE' }); emit('toast', { icon: '🗑️', text: '已完成记录清掉了，回收站里躺 30 天，误删可找回' }) }}>清空今日记录</Btn>
             <Btn
               size="sm" color="red"
               onClick={async () => {
                 const ok = await confirmBox({ title: '清空全部已完成', message: '把历史已完成待办也一并清掉？\n只删「已完成」的——没做的和重复待办不受影响。', danger: true, okText: '清空' })
-                if (ok) { dispatch({ type: 'TODO_CLEAR_ALL_DONE' }); sfx('oops') }
+                if (ok) { dispatch({ type: 'TODO_CLEAR_ALL_DONE' }); sfx('oops'); emit('toast', { icon: '🗑️', text: '历史已完成清掉了，回收站里躺 30 天，误删可找回' }) }
               }}
             >清空全部</Btn>
           </div>
@@ -151,7 +151,7 @@ export default function Todos() {
                 {td.repeat && <Chip color="blue">{REPEAT_LABEL[td.repeat]} 明天再来</Chip>}
                 <DiffMark diff={td.diff} />
                 <Chip>{catIcon(td.cat)} {td.cat}</Chip>
-                <button className="del" title="删除" onClick={() => { dispatch({ type: 'TODO_DEL', id: td.id }); sfx('oops') }}>×</button>
+                <button className="del" title="删除" onClick={() => { dispatch({ type: 'TODO_DEL', id: td.id }); sfx('oops'); emit('toast', { icon: '🗑️', text: '已移入回收站，30 天内可在设置 → 数据里恢复' }) }}>×</button>
               </li>
             ))}
           </ul>

@@ -123,7 +123,7 @@ export default function Weight() {
                   <span className="weight-day">{x.day === t ? '今天' : fmtShort(x.day)}</span>
                   <b>{x.kg} kg</b>
                   {d !== null && <Chip color={d < 0 ? 'green' : d > 0 ? 'red' : ''}>{d === 0 ? '—' : d < 0 ? `↓${-d}` : `↑${d}`}</Chip>}
-                  <button className="del" title="删除" onClick={() => { dispatch({ type: 'WEIGHT_DEL', day: x.day }); sfx('oops') }}>×</button>
+                  <button className="del" title="删除" onClick={() => { dispatch({ type: 'WEIGHT_DEL', day: x.day }); sfx('oops'); emit('toast', { icon: '🗑️', text: '已移入回收站，30 天内可在设置 → 数据里恢复' }) }}>×</button>
                 </li>
               )
             })}

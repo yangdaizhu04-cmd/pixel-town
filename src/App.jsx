@@ -6,6 +6,7 @@ import { PixelSprite } from './lib/sprites.jsx'
 import { Chip, Btn, Bar, ConfirmHost } from './components/ui.jsx'
 import { ToastHost, ConfettiHost, LevelUpModal } from './components/effects.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
+import CommandPalette from './components/CommandPalette.jsx'
 import { pomoSubscribe, pomoStartBreak, pomoSnap } from './lib/pomo.js'
 import { dayKey, pickByDay } from './lib/dates.js'
 import { fetchPoem } from './lib/poem.js'
@@ -37,6 +38,7 @@ export default function App() {
   const { state, dispatch } = useApp()
   const [page, setPage] = useState('home')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [cmdkOpen, setCmdkOpen] = useState(false)
   const [levelUp, setLevelUp] = useState(null)
   // 每日诗词（今日题词）：poem.js 内部按日期缓存 + in-flight 去重，这里只负责把结果接进来
   const [poem, setPoem] = useState(null)
@@ -113,7 +115,18 @@ export default function App() {
     levelRef.current = state.profile.level
   }, [state.profile.level])
 
-  // 键盘快捷键：数字键切页（输入框/弹窗打开时不劫持）
+  // 键盘快捷键：Ctrl/Cmd+K 快速输入（任何位置可用，优先级最高）；数字键切页（输入框/弹窗打开时不劫持）
+  useEffect(() => {
+    const onCmdK = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        sfx('pop')
+        setCmdkOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onCmdK)
+    return () => window.removeEventListener('keydown', onCmdK)
+  }, [])
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
@@ -186,6 +199,7 @@ export default function App() {
         <div className="topbar-right">
           <Chip className="lv" title={`距下一级还差 ${Math.max(0, need - profile.xp)} XP`}>Lv.{profile.level} <em className="lv-xp">{profile.xp}/{need} XP</em></Chip>
           <Chip className="wallet" title="金币：完成任务赚，商店和浇水花">🪙 {profile.coins}</Chip>
+          <Btn size="sm" title="快速输入（Ctrl+K）：记待办 / 记账 / 搜索 / 跳页" onClick={() => setCmdkOpen(true)}>⌘K</Btn>
           <Btn size="sm" title="设置" onClick={() => setSettingsOpen(true)}>⚙️</Btn>
         </div>
       </header>
@@ -269,6 +283,7 @@ export default function App() {
       <ConfirmHost />
       {showIntro && <IntroOverlay onDone={closeIntro} />}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} installable={!!installEvt} onInstall={installApp} />
+      <CommandPalette open={cmdkOpen} onClose={() => setCmdkOpen(false)} onGo={(id) => { if (page !== id) setPage(id) }} />
       <LevelUpModal level={levelUp} onClose={() => setLevelUp(null)} />
     </div>
   )

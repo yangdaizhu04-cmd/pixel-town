@@ -1,14 +1,89 @@
 import React, { useState } from 'react'
 import { useApp } from '../lib/store.jsx'
-import { Panel, Btn, Chip, Empty } from '../components/ui.jsx'
+import { Panel, Btn, Chip, Empty, confirmBox } from '../components/ui.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { Bars } from '../lib/charts.jsx'
 import { REWARDS, reward, sfx, emit } from '../lib/gamify.js'
 import { aggregate } from '../lib/weekly.js'
+import { questionOf } from '../lib/questions.js'
 import { dayKey, parseKey, monthKey, fmtShort, WEEKDAYS, addDays } from '../lib/dates.js'
 
 const MOODS = ['超棒', '开心', '平静', '低落', '难过']
 const MOOD_SPRITES = ['mood0', 'mood1', 'mood2', 'mood3', 'mood4']
+
+// 月度目标：本月立几个小目标，达成发大奖（+30 XP +15 金币）。
+// 撤销不打折也不追回奖励（宽恕优先，和小镇的其余规则一致）。
+function MonthlyGoals({ state, dispatch }) {
+  const [text, setText] = useState('')
+  const mk = monthKey()
+  const cur = (state.goals || []).filter((g) => g.month === mk)
+  const past = (state.goals || []).filter((g) => g.month !== mk)
+  const add = () => {
+    const n = text.trim()
+    if (!n) return
+    dispatch({ type: 'GOAL_ADD', text: n.slice(0, 40), month: mk })
+    setText('')
+    sfx('pop')
+  }
+  const toggle = (g) => {
+    if (!g.done) {
+      dispatch({ type: 'GOAL_TOGGLE', id: g.id })
+      sfx('levelup')
+      reward(dispatch, { ...REWARDS.goal, msg: '月度目标达成', icon: '🎯', confetti: true })
+    } else {
+      dispatch({ type: 'GOAL_TOGGLE', id: g.id })
+      sfx('pop')
+    }
+  }
+  const del = async (g) => {
+    const ok = await confirmBox({ title: '删除目标', message: `删除「${g.text}」？会先移入回收站，30 天内可恢复。`, danger: true, okText: '删除' })
+    if (!ok) return
+    dispatch({ type: 'GOAL_DEL', id: g.id })
+    sfx('oops')
+  }
+
+  return (
+    <Panel title="本月目标" icon="🎯" extra={<span className="xp-pill">{cur.filter((g) => g.done).length}/{cur.length} 达成</span>}>
+      <p className="muted">一个月能认真做完两三件小事，就已经很了不起了。达成会发大额奖励 🎉</p>
+      <div className="goal-list">
+        {cur.length === 0 && <p className="muted">这个月还没立目标——写一个「小到不可能失败」的？</p>}
+        {cur.map((g) => (
+          <div key={g.id} className={`goal-item card ${g.done ? 'done' : ''}`}>
+            <button className={`check ${g.done ? 'on' : ''}`} title={g.done ? '标记未完成' : '标记达成'} onClick={() => toggle(g)} />
+            <span className="goal-text">{g.text}</span>
+            {g.done && <Chip color="green">达成 ✓</Chip>}
+            <button className="del" title="删除" onClick={() => del(g)}>×</button>
+          </div>
+        ))}
+      </div>
+      <div className="add-row goal-add">
+        <input
+          value={text}
+          aria-label="新目标"
+          placeholder="比如：读完一本书的第一章 / 每周散步三次"
+          maxLength={40}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') add() }}
+        />
+        <Btn color="green" onClick={add}>＋ 立个目标</Btn>
+      </div>
+      {past.length > 0 && (
+        <details className="goal-past">
+          <summary>往月目标（{past.length}）</summary>
+          <ul>
+            {past.map((g) => (
+              <li key={g.id}>
+                <span className={g.done ? 'goal-done-text' : ''}>{g.month} · {g.text}</span>
+                {g.done && <Chip color="green">✓</Chip>}
+                <button className="del" title="删除" onClick={() => del(g)}>×</button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Panel>
+  )
+}
 
 // 每周小结：按所选周忠实汇总小镇数据（周一起始，可回看前几周）
 // 聚合口径复用 weekly.js 的 aggregate（与 Museum 周报同一份真相），按天各聚合一次
@@ -123,6 +198,7 @@ export default function Review() {
   const [good, setGood] = useState(saved ? saved.good : '')
   const [thanks, setThanks] = useState(saved ? saved.thanks : '')
   const [tomorrow, setTomorrow] = useState(saved ? saved.tomorrow : '')
+  const [ask, setAsk] = useState(saved ? (saved.ask || '') : '')
 
   const loadDay = (d) => {
     const r = state.reviews[d]
@@ -131,11 +207,12 @@ export default function Review() {
     setGood(r ? r.good : '')
     setThanks(r ? r.thanks : '')
     setTomorrow(r ? r.tomorrow : '')
+    setAsk(r ? (r.ask || '') : '')
     sfx('pop')
   }
 
   const save = () => {
-    dispatch({ type: 'REVIEW_SAVE', day: activeDay, mood, good: good.trim(), thanks: thanks.trim(), tomorrow: tomorrow.trim() })
+    dispatch({ type: 'REVIEW_SAVE', day: activeDay, mood, good: good.trim(), thanks: thanks.trim(), tomorrow: tomorrow.trim(), ask: ask.trim() })
     sfx('check')
     if (activeDay === t && !saved) reward(dispatch, { ...REWARDS.review, msg: '今日复盘存档', icon: '🌙', confetti: true })
     else emit('toast', { icon: '🌙', text: activeDay === t ? '复盘已更新' : '过去的这一天也补上了' })
@@ -146,6 +223,7 @@ export default function Review() {
   return (
     <>
       <WeeklyReport state={state} />
+      <MonthlyGoals state={state} dispatch={dispatch} />
 
       <Panel
         title={activeDay === t ? '今晚，和自己聊两句' : `${fmtShort(activeDay)} 的那晚`}
@@ -164,6 +242,11 @@ export default function Review() {
         </div>
 
         <div className="review-form">
+          <div className="ask-day">
+            <span className="field-label">💬 今日一问（{fmtShort(activeDay)}）</span>
+            <p className="ask-q">{questionOf(activeDay)}</p>
+            <textarea rows={2} value={ask} placeholder="想到什么写什么，不答也行。" onChange={(e) => setAsk(e.target.value)} />
+          </div>
           <label className="field">
             <span className="field-label">✨ 今天的高光时刻</span>
             <textarea rows={2} value={good} placeholder="再小都算数：晒到了太阳、准时下班、喝够了水……" onChange={(e) => setGood(e.target.value)} />
@@ -200,6 +283,7 @@ export default function Review() {
                   <b>{day === t ? '今天' : fmtShort(day)}</b>
                   <Chip>{MOODS[r.mood] || '心情'}</Chip>
                 </div>
+                {r.ask && <p className="review-line">💬 {r.ask}</p>}
                 {r.good && <p className="review-good">✨ {r.good}</p>}
                 {r.thanks && <p className="review-line">🍀 {r.thanks}</p>}
                 {r.tomorrow && <p className="review-line">🌤️ {r.tomorrow}</p>}

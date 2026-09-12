@@ -4,6 +4,11 @@ import { Modal, Btn, Field, Chip, confirmBox } from './ui.jsx'
 import { setMuted, sfx, emit } from '../lib/gamify.js'
 import { webdavUpload, webdavDownload, backupFilename } from '../lib/webdav.js'
 import { dayKey, daysBetween } from '../lib/dates.js'
+import TrashModal from './TrashModal.jsx'
+import {
+  syncGate, syncLogout, syncNow, syncSnapshot, syncSnapshots, syncRestore,
+  syncToken, syncSubscribe, decodeSnapshot,
+} from '../lib/sync.js'
 
 const PRESETS = [
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -25,7 +30,14 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
   const [height, setHeight] = useState(state.profile.height)
   const [danger, setDanger] = useState(false)
   const [davBusy, setDavBusy] = useState('')
+  // 回收站 / 云同步的局部状态。同步密码刻意只存在组件里（换取 token 后即弃），不入存档不入备份
+  const [trashOpen, setTrashOpen] = useState(false)
+  const [syncPass, setSyncPass] = useState('')
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [snapBusy, setSnapBusy] = useState(false)
+  const [syncSt, setSyncSt] = useState(null)
 
+  useEffect(() => syncSubscribe(setSyncSt), [])
   useEffect(() => {
     if (open) { // 打开弹窗时同步表单初值（刻意在 effect 里 setState）
       setForm(state.settings)
@@ -33,6 +45,7 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
       setHeight(state.profile.height)
       setDanger(false)
       setDavBusy('')
+      setSyncPass('')
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -129,6 +142,68 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
     onClose()
   }
 
+  // ---------- 云同步（可选，部署到自己的 CloudBase） ----------
+  const connectSync = async () => {
+    const url = (form.syncUrl || '').trim()
+    if (!/^https?:\/\//.test(url)) { emit('toast', { icon: '🔗', text: '先填好云函数地址（形如 https://xxx.service.tcloudbase.com）' }); sfx('oops'); return }
+    if (syncPass.length < 4) { emit('toast', { icon: '🔑', text: '访问密码至少 4 位（首次会自动注册）' }); sfx('oops'); return }
+    setSyncBusy(true)
+    try {
+      dispatch({ type: 'SETTINGS_SET', patch: { syncUrl: url } })
+      await syncGate(url, syncPass)
+      await syncNow()
+      sfx('levelup')
+      emit('toast', { icon: '🔄', text: '云同步已开启，这台设备和云端接上啦' })
+    } catch (e) {
+      emit('toast', { icon: '🔄', text: `连接失败：${e.message}` })
+      sfx('oops')
+    }
+    setSyncBusy(false)
+  }
+  const doSyncNow = async () => {
+    setSyncBusy(true)
+    try { await syncNow(); emit('toast', { icon: '🔄', text: '同步完成' }) } catch (e) {
+      emit('toast', { icon: '🔄', text: `同步失败：${e.message}` }); sfx('oops')
+    }
+    setSyncBusy(false)
+  }
+  const doSnapshot = async () => {
+    setSnapBusy(true)
+    try {
+      dispatch({ type: 'SETTINGS_SET', patch: { syncUrl: (form.syncUrl || '').trim() } })
+      await syncSnapshot({ ...state, settings: { ...state.settings, syncUrl: (form.syncUrl || '').trim() } }, '手动备份')
+      sfx('levelup')
+      emit('toast', { icon: '🗃️', text: '已备份到云端（每天也会自动快照一份）' })
+    } catch (e) {
+      emit('toast', { icon: '🗃️', text: `备份失败：${e.message}` }); sfx('oops')
+    }
+    setSnapBusy(false)
+  }
+  const listAndRestore = async () => {
+    setSnapBusy(true)
+    try {
+      const list = await syncSnapshots({ ...state, settings: { ...state.settings, syncUrl: (form.syncUrl || '').trim() } })
+      setSnapBusy(false)
+      if (!list.length) { emit('toast', { icon: '🗃️', text: '云端还没有快照，先「备份到云端」一次' }); return }
+      const pick = list[0] // 列表按时间倒序，第一个就是最新快照
+      const data = await syncRestore({ ...state, settings: { ...state.settings, syncUrl: (form.syncUrl || '').trim() } }, pick.ts)
+      const next = hydrate(decodeSnapshot(data))
+      const ok = await confirmBox({
+        title: '从云端快照恢复？',
+        message: `最新快照：${new Date(pick.ts).toLocaleString()}\n${summarizeSave(next)}\n恢复会覆盖当前小镇记录，确定吗？`,
+        danger: true, okText: '恢复',
+      })
+      if (!ok) return
+      dispatch({ type: 'IMPORT', state: next })
+      sfx('levelup')
+      emit('toast', { icon: '🗃️', text: '已从云端快照恢复！' })
+      onClose()
+    } catch (e) {
+      setSnapBusy(false)
+      emit('toast', { icon: '🗃️', text: `快照操作失败：${e.message}` }); sfx('oops')
+    }
+  }
+
   const lastExport = state.profile.lastExportDay
   const exportHint = !lastExport
     ? '还没有导出过备份。localStorage 一旦被浏览器清理就无法找回，建议每周导出一次～'
@@ -206,6 +281,38 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
         </section>
 
         <section>
+          <h4>🔄 云同步（多设备，可选）</h4>
+          <p className="settings-hint">把小镇数据实时同步到自己部署的 CloudBase 云函数（免费额度足够个人用），手机 / 电脑多端接上同一个访问密码就是同一份数据。密钥不上云，同步密码只用来换本机令牌。部署方法见 README「多端同步」一节。</p>
+          <div className="form-row">
+            <Field label="云函数地址">
+              <input value={form.syncUrl || ''} onChange={(e) => setForm({ ...form, syncUrl: e.target.value })} placeholder="https://你的环境.service.tcloudbase.com" />
+            </Field>
+            <Field label="访问密码">
+              <input type="password" value={syncPass} onChange={(e) => setSyncPass(e.target.value)} placeholder="至少 4 位，多端保持一致" autoComplete="off" />
+            </Field>
+          </div>
+          <div className="btn-row">
+            {syncToken()
+              ? (
+                <>
+                  <Btn color="green" disabled={syncBusy} onClick={doSyncNow}>{syncBusy ? '同步中…' : '立即同步'}</Btn>
+                  <Btn disabled={snapBusy} onClick={doSnapshot}>{snapBusy ? '备份中…' : '🗃️ 备份到云端'}</Btn>
+                  <Btn disabled={snapBusy} onClick={listAndRestore}>从快照恢复</Btn>
+                  <Btn color="red" onClick={() => { syncLogout(); setSyncPass(''); emit('toast', { icon: '🔄', text: '已退出云同步（本机数据不受影响）' }) }}>退出同步</Btn>
+                </>
+              )
+              : <Btn color="green" disabled={syncBusy} onClick={connectSync}>{syncBusy ? '连接中…' : '连接并开启同步'}</Btn>}
+          </div>
+          <div className="settings-status">
+            {syncToken()
+              ? <Chip color={syncSt?.status?.startsWith('error') ? 'red' : syncSt?.status === 'syncing' ? 'orange' : 'green'}>
+                  {syncSt?.status === 'syncing' ? '同步中…' : syncSt?.status?.startsWith('error') ? `同步异常：${syncSt.status.slice(6)}` : '✓ 已连接，改动自动同步'}
+                </Chip>
+              : <Chip>未开启（数据仍保存在本机）</Chip>}
+          </div>
+        </section>
+
+        <section>
           <h4>☁️ 云备份（WebDAV，可选）</h4>
           <p className="settings-hint">填 WebDAV 地址和账号即可一键备份/恢复。坚果云地址形如 https://dav.jianguoyun.com/dav/（密码用「应用密码」）。若浏览器提示 CORS 拦截，说明该网盘不支持网页直连，改用下方手动导出即可。</p>
           <div className="form-row">
@@ -264,6 +371,7 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
               导入备份
               <input type="file" accept="application/json" onChange={(e) => e.target.files[0] && importData(e.target.files[0])} />
             </label>
+            <Btn onClick={() => setTrashOpen(true)}>🗑️ 回收站{(state.trash || []).length ? `（${state.trash.length}）` : ''}</Btn>
             <Btn color="red" onClick={reset}>{danger ? '再点一次确认清空！' : '重置小镇'}</Btn>
           </div>
           {!lastExport && (
@@ -283,6 +391,7 @@ export default function SettingsModal({ open, onClose, installable = false, onIn
         <Btn onClick={onClose}>取消</Btn>
         <Btn color="green" onClick={save}>保存</Btn>
       </div>
+      <TrashModal open={trashOpen} onClose={() => setTrashOpen(false)} />
     </Modal>
   )
 }

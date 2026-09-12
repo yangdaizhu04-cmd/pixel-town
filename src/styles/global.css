@@ -889,3 +889,93 @@ body[data-period='dawn'] .hill.h3 { background: #8fc07f; }
   /* 安装引导横幅：避开底部 Tab 导航和右下角 FAB */
   .install-banner { left: 16px; right: 78px; width: auto; max-width: none; transform: none; bottom: calc(92px + env(safe-area-inset-bottom)); }
 }
+
+/* ============================================================
+   v0.7.0 新增：⌘K 命令面板 / 专注声音面板 / 月度目标 / 回收站 / 每日一问
+   ============================================================ */
+
+/* ---------- ⌘K 命令面板 ---------- */
+.cmdk-overlay { align-items: flex-start; padding-top: 12vh; }
+.cmdk {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--paper2);
+  border: 3px solid var(--line);
+  box-shadow: 6px 6px 0 var(--shadow);
+  image-rendering: pixelated;
+  overflow: hidden;
+}
+.cmdk-input {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 3px solid var(--line);
+  background: var(--sand);
+}
+.cmdk-input > span {
+  font-size: 12px; font-weight: bold; color: var(--paper2);
+  background: var(--brown); padding: 2px 6px; flex-shrink: 0;
+}
+.cmdk-input input {
+  flex: 1; border: 0; background: transparent; outline: none;
+  font-size: 16px; padding: 4px 0; min-width: 0;
+}
+.cmdk-list { max-height: 46vh; overflow-y: auto; padding: 6px; }
+.cmdk-group {
+  font-size: 12px; color: var(--ink2);
+  padding: 8px 8px 4px; letter-spacing: 2px;
+}
+.cmdk-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; cursor: pointer;
+  border: 2px solid transparent;
+}
+.cmdk-item.sel { background: var(--sand); border-color: var(--line); }
+.cmdk-item.hintOnly { color: var(--ink2); cursor: default; font-size: 14px; }
+.cmdk-icon { width: 24px; text-align: center; flex-shrink: 0; }
+.cmdk-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk-hint { font-size: 12px; color: var(--ink2); flex-shrink: 0; }
+
+/* ---------- 专注声音面板 ---------- */
+.sound-panel { margin-top: 14px; padding: 12px 14px; border: 2px dashed var(--line); background: var(--paper2); }
+.sound-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sound-title { font-weight: bold; font-size: 14px; }
+.sound-chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sound-chip {
+  font-size: 13px; padding: 5px 10px;
+  background: var(--paper); border: 2px solid var(--line); color: var(--ink);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.sound-chip.on { background: var(--green-pale); border-color: var(--green-d); color: var(--green-d); font-weight: bold; }
+.sound-mix { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; padding-left: 2px; }
+.sound-vol { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.sound-vol.master { border-left: 2px dashed var(--line); padding-left: 14px; }
+.sound-vol input[type='range'] { width: 110px; accent-color: var(--green-d); }
+
+/* ---------- 月度目标 ---------- */
+.goal-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.goal-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+.goal-item.done { opacity: 0.75; }
+.goal-text { flex: 1; overflow-wrap: anywhere; }
+.goal-item.done .goal-text { text-decoration: line-through; color: var(--ink2); }
+.goal-add { margin-top: 6px; }
+.goal-past { margin-top: 10px; font-size: 14px; }
+.goal-past summary { cursor: pointer; color: var(--ink2); }
+.goal-past ul { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.goal-past li { display: flex; align-items: center; gap: 8px; }
+.goal-done-text { text-decoration: line-through; color: var(--ink2); }
+
+/* ---------- 回收站 ---------- */
+.trash-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.trash-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+.trash-item.restored { opacity: 0.7; }
+.trash-icon { font-size: 18px; }
+.trash-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.trash-title { overflow-wrap: anywhere; }
+.trash-sub { font-size: 12px; color: var(--ink2); }
+
+/* ---------- 每日一问 ---------- */
+.ask-day {
+  margin-bottom: 12px; padding: 10px 12px;
+  background: var(--sand); border: 2px solid var(--line);
+}
+.ask-day textarea { margin-top: 8px; }
+.ask-q { font-size: 15px; font-weight: bold; color: var(--brown); margin-top: 4px; }

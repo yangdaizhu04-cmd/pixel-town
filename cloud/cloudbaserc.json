@@ -1,0 +1,23 @@
+{
+  "$schema": "https://framework-standards.tcloudbase.com/framework.json",
+  "envId": "{{ENV_ID}}",
+  "framework": {
+    "name": "pixel-town",
+    "plugins": [
+      {
+        "use": "@cloudbase/framework-plugin-function",
+        "id": "gate",
+        "name": "gate",
+        "installDependency": true,
+        "httpAccess": true
+      },
+      {
+        "use": "@cloudbase/framework-plugin-function",
+        "id": "sync",
+        "name": "sync",
+        "installDependency": true,
+        "httpAccess": true
+      }
+    ]
+  }
+}

@@ -5,6 +5,8 @@ import { Bars } from '../lib/charts.jsx'
 import { PixelSprite } from '../lib/sprites.jsx'
 import { reward, sfx, emit } from '../lib/gamify.js'
 import { pomoSubscribe, pomoStart, pomoPause, pomoResume, pomoReset, pomoStop, pomoSetBreak } from '../lib/pomo.js'
+import { soundAutoStart } from '../lib/sound.js'
+import SoundPanel from '../components/SoundPanel.jsx'
 import { dayKey, lastNDays, fmtShort, daysBetween, WEEKDAYS } from '../lib/dates.js'
 
 const POMO_MINS = [15, 25, 45, 60]
@@ -73,6 +75,7 @@ function Pomodoro() {
       emit('toast', { icon: '☕', text: `休息 ${breakMin} 分钟，起来走走吧` })
     } else {
       pomoStart(min, planId, 'focus')
+      soundAutoStart() // 开了「专注自动播放」就顺手把上次的声音组合打开（此处是点击手势，符合自动播放策略）
       emit('toast', { icon: '🍅', text: `番茄钟出发！接下来 ${min} 分钟属于你` })
     }
   }
@@ -217,6 +220,7 @@ export default function Study() {
   return (
     <>
       <Pomodoro />
+      <SoundPanel />
 
       <Panel title="本周学习时长" icon="⏳" extra={<span className="xp-pill">本周共 {week.reduce((m, x) => m + x.value, 0)} 分钟</span>}>
         {state.study.length === 0 ? <Empty icon="📚">先立一个小目标吧！</Empty> : <Bars data={week} rows={8} scale={34} fmt={(v) => `${v}min`} />}
@@ -246,7 +250,7 @@ export default function Study() {
                       {overdue ? `已过期 ${-left} 天` : `剩 ${left} 天`}
                     </Chip>
                   )}
-                  <button className="del" title="删除计划" onClick={async () => { if (await confirmBox({ title: '删除计划', message: `删除计划「${p.title}」？学习记录会一起删除哦`, danger: true, okText: '删除' })) { dispatch({ type: 'STUDY_DEL', id: p.id }); sfx('oops') } }}>×</button>
+                  <button className="del" title="删除计划" onClick={async () => { if (await confirmBox({ title: '删除计划', message: `删除计划「${p.title}」？学习记录会一起移入回收站（保留 30 天）`, danger: true, okText: '删除' })) { dispatch({ type: 'STUDY_DEL', id: p.id }); sfx('oops'); emit('toast', { icon: '🗑️', text: '已移入回收站，30 天内可在设置 → 数据里恢复' }) } }}>×</button>
                 </header>
                 <Bar pct={pct} color={pct >= 100 ? 'gold' : 'green'} />
                 <div className="plan-meta">

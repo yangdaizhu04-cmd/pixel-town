@@ -3,6 +3,7 @@ import { dayKey, addDays, monthKey, daysBetween } from './dates.js'
 import { xpNeeded, emit } from './gamify.js'
 import { WORDS } from './words.js'
 import { thirstiestOf, growersOf } from './shop.js'
+import { applyPull, syncOnState, syncBind, syncInit } from './sync.js'
 
 // ---------- 植物生长 ----------
 export const STAGE_PTS = [0, 2, 5, 9, 14]
@@ -23,6 +24,15 @@ const uid = () => Math.random().toString(36).slice(2, 9)
 const MAX_LEDGER = 4000 // 约 10 年的每天一笔
 const MAX_REVIEWS = 500 // 约 1.5 年的每日复盘
 const MAX_WEIGHTS = 2000 // 约 5 年的每日上秤
+const MAX_TRASH = 300 // 回收站条数封顶（超出裁最旧的，正常远触不到）
+export const TRASH_DAYS = 30 // 软删除保留期：到期在 hydrate 时自动清理
+
+// 参与云同步的顶层切片。reducer 外壳会对比前后 state，把「这次动作动过谁」记进 _touched
+//（KV 型切片整体 LWW 用）；列表型切片的每条记录还有自己的 updatedAt（记录级 LWW 用）。
+export const SYNC_KEYS = [
+  'profile', 'settings', 'todos', 'ledger', 'habits', 'study', 'goals',
+  'weights', 'reviews', 'english', 'budgets', 'claimed', 'xpLog', 'pomoLog', 'trash',
+]
 
 // ---------- 种子数据（首次打开是一座干净的空小镇；所有记录都靠自己动手，没有演示假数据） ----------
 // 曾经这里预置过全套演示数据（演示账目/待办/习惯/体重/复盘等），造成「没记过却有数据、删了又回」的困惑
@@ -72,6 +82,8 @@ export function seed() {
     ledger: [],
     habits: [],
     study: [],
+    goals: [], // 月度目标 { id, month, text, done, createdAt, doneAt, updatedAt }
+    trash: [], // 回收站 { id, kind, refId, data, deletedAt, updatedAt, restoredAt }，新的在前
     // v2 生词本：queue 从 string 升级为 { w, due, interval }（简化间隔重复）
     english: { known: [], queue: [], right: 0, wrong: 0, custom: [] },
     weights: [],
@@ -161,6 +173,25 @@ export function hydrate(parsed) {
     .map((q) => ({ ...q, interval: q.interval || 0, due: q.due || dayKey() }))
   // 聊天消息 id 兜底：旧档没有 id，回填后列表才能用稳定 key 渲染
   s.chat = (s.chat || []).map((m) => (m.id ? m : { ...m, id: uid() }))
+  // v3 记录级 updatedAt 兜底：同步合并靠「新者胜」，旧档没有时间戳的一律补 0
+  //（0 只会和同批旧档比较；一旦本机编辑过就会拿到真实时间戳并赢得合并）
+  const at = (x) => (Number.isFinite(x?.updatedAt) ? x.updatedAt : 0)
+  s.todos = (s.todos || []).map((x) => ({ ...x, updatedAt: at(x) }))
+  s.ledger = (s.ledger || []).map((x) => ({ ...x, updatedAt: at(x) }))
+  s.habits = (s.habits || []).map((x) => ({ ...x, updatedAt: at(x) }))
+  s.study = (s.study || []).map((x) => ({ ...x, updatedAt: at(x) }))
+  s.goals = (s.goals || []).map((x) => ({ ...x, updatedAt: at(x) }))
+  // 体重原本以 day 为唯一键、没有 id：同步层按「记录必须带 id」处理，这里统一补 id=day
+  s.weights = (s.weights || []).map((x) => ({ ...x, id: x.id || x.day, updatedAt: at(x) }))
+  s.reviews = Object.fromEntries(
+    Object.entries(s.reviews || {}).map(([d, r]) => [d, { ...r, updatedAt: at(r) }]),
+  )
+  s.trash = (s.trash || [])
+    .map((x) => ({ ...x, updatedAt: at(x), restoredAt: x.restoredAt || 0 }))
+    .filter((x) => x && x.refId && x.data) // 结构不合法的条目直接丢弃
+  // 保留期到了的回收站条目自动清理（按 updatedAt 计——恢复也会刷新它；每次打开/导入都会走一遍，无需定时器）
+  const expire = Date.now() - TRASH_DAYS * 86400000
+  s.trash = s.trash.filter((x) => (x.updatedAt || 0) >= expire).slice(0, MAX_TRASH)
   // 历史超限数据的写入时裁剪（旧档一次性裁到位，口径与 reducer 封顶一致）
   s.ledger = (s.ledger || []).slice(0, MAX_LEDGER)
   s.weights = (s.weights || []).slice(-MAX_WEIGHTS)
@@ -178,7 +209,17 @@ function load() {
 }
 
 // ---------- Reducer（纯函数：副作用一律走事件总线） ----------
-export function reducer(s, a) {
+const stamp = (x) => ({ ...x, updatedAt: Date.now() })
+
+// 软删除：把一条记录移进回收站（墓碑）。restoredAt 记录「曾被恢复」——
+// 同步时墓碑用来删掉其他设备上的同一条记录；恢复不是删条目，而是打上 restoredAt 标记，
+// 这样多端不会出现「A 恢复了、B 又把墓碑推回来把记录删掉」的循环。
+export function trashEntry(kind, refId, data) {
+  return { id: uid(), kind, refId, data, deletedAt: Date.now(), updatedAt: Date.now(), restoredAt: 0 }
+}
+const withTrash = (s, entries) => [ ...entries, ...s.trash ].slice(0, MAX_TRASH)
+
+function reducerRaw(s, a) {
   const t = dayKey()
   const P = { ...s.profile }
   switch (a.type) {
@@ -321,7 +362,7 @@ export function reducer(s, a) {
     case 'TODO_ADD':
       return {
         ...s,
-        todos: [{ id: uid(), text: a.text, cat: a.cat || '生活', prio: !!a.prio, done: false, day: a.day || t, repeat: a.repeat || '', lastDone: '', diff: a.diff || 2 }, ...s.todos],
+        todos: [{ id: uid(), text: a.text, cat: a.cat || '生活', prio: !!a.prio, done: false, day: a.day || t, repeat: a.repeat || '', lastDone: '', diff: a.diff || 2, updatedAt: Date.now() }, ...s.todos],
       }
     case 'TODO_TOGGLE': {
       const todo = s.todos.find((x) => x.id === a.id)
@@ -332,7 +373,7 @@ export function reducer(s, a) {
         const undo = todo.lastDone === clickedDay
         return {
           ...s,
-          todos: s.todos.map((x) => (x.id === a.id ? { ...x, lastDone: undo ? '' : clickedDay } : x)),
+          todos: s.todos.map((x) => (x.id === a.id ? stamp({ ...x, lastDone: undo ? '' : clickedDay }) : x)),
           profile: undo ? s.profile : { ...P, stats: { ...P.stats, todosDone: (P.stats?.todosDone || 0) + 1 } },
         }
       }
@@ -340,29 +381,43 @@ export function reducer(s, a) {
       // 完成逾期待办时把 day 挪到今天：否则该条会「既不在清单、也不在今日已完成」而凭空消失（全面检查发现）
       return {
         ...s,
-        todos: s.todos.map((x) => (x.id === a.id ? { ...x, done: nowDone, day: nowDone ? t : x.day } : x)),
+        todos: s.todos.map((x) => (x.id === a.id ? stamp({ ...x, done: nowDone, day: nowDone ? t : x.day }) : x)),
         profile: nowDone ? { ...P, stats: { ...P.stats, todosDone: (P.stats?.todosDone || 0) + 1 } } : s.profile,
       }
     }
     case 'TODO_POSTPONE':
-      return { ...s, todos: s.todos.map((x) => (x.id === a.id ? { ...x, day: a.day } : x)) }
-    case 'TODO_DEL':
-      return { ...s, todos: s.todos.filter((x) => x.id !== a.id) }
-    case 'TODO_CLEAR_DONE':
-      return { ...s, todos: s.todos.filter((x) => !(x.done && x.day === t)) }
+      return { ...s, todos: s.todos.map((x) => (x.id === a.id ? stamp({ ...x, day: a.day }) : x)) }
+    case 'TODO_DEL': {
+      const td = s.todos.find((x) => x.id === a.id)
+      if (!td) return s
+      return { ...s, todos: s.todos.filter((x) => x.id !== a.id), trash: withTrash(s, [trashEntry('todo', td.id, td)]) }
+    }
+    case 'TODO_CLEAR_DONE': {
+      const gone = s.todos.filter((x) => x.done && x.day === t)
+      return {
+        ...s,
+        todos: s.todos.filter((x) => !(x.done && x.day === t)),
+        trash: withTrash(s, gone.map((x) => trashEntry('todo', x.id, x))),
+      }
+    }
     // 历史数据卫生：把所有「已完成」的一次清掉（重复待办 done 恒为 false，天然不受影响）
-    case 'TODO_CLEAR_ALL_DONE':
-      return { ...s, todos: s.todos.filter((x) => !x.done) }
+    case 'TODO_CLEAR_ALL_DONE': {
+      const gone = s.todos.filter((x) => x.done)
+      return { ...s, todos: s.todos.filter((x) => !x.done), trash: withTrash(s, gone.map((x) => trashEntry('todo', x.id, x))) }
+    }
 
     // ---------- 账本（v2 加预算） ----------
     case 'LEDGER_ADD':
       return {
         ...s,
-        ledger: [{ id: uid(), day: a.day || t, type: a.dir, amount: a.amount, cat: a.cat, note: a.note || '' }, ...s.ledger].slice(0, MAX_LEDGER),
+        ledger: [{ id: uid(), day: a.day || t, type: a.dir, amount: a.amount, cat: a.cat, note: a.note || '', updatedAt: Date.now() }, ...s.ledger].slice(0, MAX_LEDGER),
         profile: { ...P, stats: { ...P.stats, ledger: (P.stats?.ledger || 0) + 1 } },
       }
-    case 'LEDGER_DEL':
-      return { ...s, ledger: s.ledger.filter((x) => x.id !== a.id) }
+    case 'LEDGER_DEL': {
+      const e = s.ledger.find((x) => x.id === a.id)
+      if (!e) return s
+      return { ...s, ledger: s.ledger.filter((x) => x.id !== a.id), trash: withTrash(s, [trashEntry('ledger', e.id, e)]) }
+    }
     case 'BUDGET_SET': {
       const b = { ...(s.budgets || {}) }
       if (a.amount > 0) b[a.cat] = a.amount
@@ -372,7 +427,7 @@ export function reducer(s, a) {
 
     // ---------- 习惯 ----------
     case 'HABIT_ADD':
-      return { ...s, habits: [...s.habits, { id: uid(), name: a.name, icon: a.icon, color: a.color || 'green', days: {}, diff: a.diff || 2 }] }
+      return { ...s, habits: [...s.habits, { id: uid(), name: a.name, icon: a.icon, color: a.color || 'green', days: {}, diff: a.diff || 2, updatedAt: Date.now() }] }
     case 'HABIT_TOGGLE': {
       return {
         ...s,
@@ -381,25 +436,31 @@ export function reducer(s, a) {
           const days = { ...h.days }
           if (days[a.day]) delete days[a.day]
           else days[a.day] = 1
-          return { ...h, days }
+          return stamp({ ...h, days })
         }),
       }
     }
-    case 'HABIT_DEL':
-      return { ...s, habits: s.habits.filter((h) => h.id !== a.id) }
+    case 'HABIT_DEL': {
+      const h = s.habits.find((x) => x.id === a.id)
+      if (!h) return s
+      return { ...s, habits: s.habits.filter((x) => x.id !== a.id), trash: withTrash(s, [trashEntry('habit', h.id, h)]) }
+    }
 
     // ---------- 学习 ----------
     case 'STUDY_ADD':
-      return { ...s, study: [...s.study, { id: uid(), title: a.title, targetH: a.targetH || 10, deadline: a.deadline || '', sessions: [] }] }
+      return { ...s, study: [...s.study, { id: uid(), title: a.title, targetH: a.targetH || 10, deadline: a.deadline || '', sessions: [], updatedAt: Date.now() }] }
     case 'STUDY_LOG':
       return {
         ...s,
         study: s.study.map((p) => (p.id === a.id
-          ? { ...p, sessions: [...p.sessions, { day: t, min: a.min, note: a.note || '' }] }
+          ? stamp({ ...p, sessions: [...p.sessions, { day: t, min: a.min, note: a.note || '' }] })
           : p)),
       }
-    case 'STUDY_DEL':
-      return { ...s, study: s.study.filter((p) => p.id !== a.id) }
+    case 'STUDY_DEL': {
+      const p = s.study.find((x) => x.id === a.id)
+      if (!p) return s
+      return { ...s, study: s.study.filter((x) => x.id !== a.id), trash: withTrash(s, [trashEntry('study', p.id, p)]) }
+    }
     // 番茄钟完成：可挂在学习计划上，也可以只是自由专注；每次完成都记一条「专注墙」条目
     case 'POMO_DONE': {
       const NP = { ...P, stats: { ...P.stats, pomos: (P.stats?.pomos || 0) + 1 } }
@@ -462,13 +523,16 @@ export function reducer(s, a) {
     // ---------- 体重 ----------
     case 'WEIGHT_ADD': {
       const rest = s.weights.filter((x) => x.day !== a.day)
-      return { ...s, weights: [...rest, { day: a.day, kg: a.kg }].sort((x, y) => (x.day < y.day ? -1 : 1)).slice(-MAX_WEIGHTS) }
+      return { ...s, weights: [...rest, { id: a.day, day: a.day, kg: a.kg, updatedAt: Date.now() }].sort((x, y) => (x.day < y.day ? -1 : 1)).slice(-MAX_WEIGHTS) }
     }
-    case 'WEIGHT_DEL':
-      return { ...s, weights: s.weights.filter((x) => x.day !== a.day) }
+    case 'WEIGHT_DEL': {
+      const w = s.weights.find((x) => x.day === a.day)
+      if (!w) return s
+      return { ...s, weights: s.weights.filter((x) => x.day !== a.day), trash: withTrash(s, [trashEntry('weight', w.id || w.day, w)]) }
+    }
 
     case 'REVIEW_SAVE': {
-      const reviews = { ...s.reviews, [a.day]: { mood: a.mood, good: a.good, thanks: a.thanks, tomorrow: a.tomorrow } }
+      const reviews = { ...s.reviews, [a.day]: { mood: a.mood, good: a.good, thanks: a.thanks, tomorrow: a.tomorrow, ask: a.ask || '', updatedAt: Date.now() } }
       const keys = Object.keys(reviews)
       if (keys.length > MAX_REVIEWS) {
         // 日期 key 排序后裁掉最早的，封顶见 MAX_REVIEWS 注释
@@ -476,6 +540,47 @@ export function reducer(s, a) {
       }
       return { ...s, reviews }
     }
+
+    // ---------- 月度目标（达成时由页面层追加 GRANT 发奖，宽恕优先不追回） ----------
+    case 'GOAL_ADD':
+      return {
+        ...s,
+        goals: [...(s.goals || []), { id: uid(), month: a.month || t.slice(0, 7), text: a.text, done: false, createdAt: Date.now(), doneAt: 0, updatedAt: Date.now() }],
+      }
+    case 'GOAL_TOGGLE': {
+      const g = (s.goals || []).find((x) => x.id === a.id)
+      if (!g) return s
+      const done = !g.done
+      return { ...s, goals: s.goals.map((x) => (x.id === a.id ? stamp({ ...x, done, doneAt: done ? Date.now() : 0 }) : x)) }
+    }
+    case 'GOAL_DEL': {
+      const g = (s.goals || []).find((x) => x.id === a.id)
+      if (!g) return s
+      return { ...s, goals: s.goals.filter((x) => x.id !== a.id), trash: withTrash(s, [trashEntry('goal', g.id, g)]) }
+    }
+
+    // ---------- 回收站 ----------
+    // 恢复：墓碑打上 restoredAt（不删条目，同步靠它压制其他设备的「删除」），记录本体带新时间戳放回原集合
+    case 'TRASH_RESTORE': {
+      const ent = s.trash.find((x) => x.id === a.id)
+      if (!ent || ent.restoredAt) return s // 已恢复过 → 幂等返回（记录已在清单里）
+      const rec = stamp({ ...ent.data })
+      let next = { ...s }
+      if (ent.kind === 'todo') next.todos = [rec, ...s.todos.filter((x) => x.id !== ent.refId)]
+      else if (ent.kind === 'ledger') next.ledger = [rec, ...s.ledger.filter((x) => x.id !== ent.refId)]
+      else if (ent.kind === 'habit') next.habits = [rec, ...s.habits.filter((x) => x.id !== ent.refId)]
+      else if (ent.kind === 'study') next.study = [...s.study.filter((x) => x.id !== ent.refId), rec]
+      else if (ent.kind === 'goal') next.goals = [...(s.goals || []).filter((x) => x.id !== ent.refId), rec]
+      else if (ent.kind === 'weight') {
+        next.weights = [...s.weights.filter((x) => x.day !== ent.refId), rec].sort((x, y) => (x.day < y.day ? -1 : 1))
+      } else return s
+      next.trash = s.trash.map((x) => (x.id === a.id ? stamp({ ...x, restoredAt: Date.now() }) : x))
+      return next
+    }
+    case 'TRASH_PURGE':
+      return { ...s, trash: s.trash.filter((x) => x.id !== a.id) }
+    case 'TRASH_EMPTY':
+      return { ...s, trash: [] }
 
     case 'NEWS_SET':
       return { ...s, news: { cachedAt: a.cachedAt, items: a.items, source: a.source } }
@@ -508,8 +613,24 @@ export function reducer(s, a) {
       return next
     }
     case 'RESET': return seed()
+    // 云同步拉取：把远端数据按记录级 LWW 并进本地（applyPull 纯函数，没变化返回原 state）
+    case 'SYNC_MERGE': return applyPull(s, a.data).state
     default: return s
   }
+}
+
+// reducer 外壳：动作处理完后对比前后 state，把被触碰的顶层切片记进 _touched（毫秒时间戳）。
+// 列表记录的合并用每条记录自己的 updatedAt；profile/english/budgets 这类 KV 型切片没有记录级
+// 结构，就用 _touched[key] 当「整块」的时间戳做新者胜。key 没变就不写，避免无谓的时间戳抖动。
+export function reducer(s, a) {
+  const next = reducerRaw(s, a)
+  if (next === s) return s
+  const touched = { ...(s._touched || {}) }
+  let dirty = false
+  for (const k of SYNC_KEYS) {
+    if (next[k] !== s[k]) { touched[k] = Date.now(); dirty = true }
+  }
+  return dirty ? { ...next, _touched: touched } : next
 }
 
 const StateCtx = createContext(null)
@@ -544,6 +665,12 @@ export function AppProvider({ children }) {
       clearTimeout(timer.current)
     }
   }, [])
+  // 云同步（可选）：state 变化喂给引擎（引擎自己防抖 push）；启动时注册 commit + 定时 pull
+  useEffect(() => { syncOnState(state) }, [state])
+  useEffect(() => {
+    syncBind((data) => dispatch({ type: 'SYNC_MERGE', data }))
+    return syncInit()
+  }, [dispatch])
   // state 与 dispatch 分两个 Context：dispatch 引用永远稳定，只需要发动作的组件
   // （用 useDispatch）订阅 DispatchCtx，就不会被任何 state 变化牵连重渲染
   return (

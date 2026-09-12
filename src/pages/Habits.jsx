@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useApp, habitStreak } from '../lib/store.jsx'
 import { Panel, Btn, Empty, Chip, confirmBox } from '../components/ui.jsx'
-import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx } from '../lib/gamify.js'
+import { REWARDS, DIFFS, diffOf, rewardBy, reward, sfx, emit } from '../lib/gamify.js'
 import { dayKey, addDays, lastNDays, fmtShort, WEEKDAYS } from '../lib/dates.js'
 
 const EMOJIS = ['💧', '🏃', '📖', '🧘', '🎸', '🛏️', '🥗', '✏️', '🧹', '🌱']
@@ -74,7 +74,7 @@ export default function Habits() {
                     <span className="habit-icon">{h.icon}</span>
                     <span className="habit-name">{h.name}</span>
                     {diffOf(h).id !== 2 && <span className="diff-mark" title={`难度：${diffOf(h).label}`}>{diffOf(h).icon}</span>}
-                    <button className="del" title="删除习惯" onClick={async () => { if (await confirmBox({ title: '删除习惯', message: `删除习惯「${h.name}」？它的打卡记录也会一起消失哦`, danger: true, okText: '删除' })) { dispatch({ type: 'HABIT_DEL', id: h.id }); sfx('oops') } }}>×</button>
+                    <button className="del" title="删除习惯" onClick={async () => { if (await confirmBox({ title: '删除习惯', message: `删除习惯「${h.name}」？会先移入回收站（保留 30 天），打卡记录一起移入`, danger: true, okText: '删除' })) { dispatch({ type: 'HABIT_DEL', id: h.id }); sfx('oops'); emit('toast', { icon: '🗑️', text: '已移入回收站，30 天内可在设置 → 数据里恢复' }) } }}>×</button>
                   </div>
                   {days.map((d) => {
                     const checked = !!h.days[d]
