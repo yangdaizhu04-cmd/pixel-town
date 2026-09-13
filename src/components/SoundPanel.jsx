@@ -5,9 +5,9 @@ import {
 } from '../lib/sound.js'
 import { Btn } from './ui.jsx'
 
-const ICONS = { rain: '🌧️', white: '🌫️', fire: '🔥', piano: '🎹' }
+const ICONS = { rain: '🌧️', waves: '🌊', fire: '🔥', piano: '🎹' }
 
-// 专注声音面板：四路合成音源混音 + 主音量。挂在学习页番茄钟下面。
+// 专注声音面板：四路真实录音混音 + 主音量。挂在学习页番茄钟下面。
 // 组件自身是纯展示 + 调用 sound.js 的开关，状态以 sound.js 为单一真相（subscribe 回调刷新）。
 export default function SoundPanel() {
   const [prefs, setPrefs] = useState(soundPrefs)
@@ -24,7 +24,7 @@ export default function SoundPanel() {
             <button
               key={id}
               className={`sound-chip ${prefs.active[id] ? 'on' : ''}`}
-              title={`${soundLabel(id)}（合成音，无音频文件）`}
+              title={`${soundLabel(id)}（真实录音，可多路混音）`}
               onClick={() => soundToggle(id)}
             >
               {ICONS[id]} {soundLabel(id)}
