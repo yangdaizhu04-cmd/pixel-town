@@ -1,6 +1,6 @@
 # 对标 ThreeUI 的设计优化方案（v0.8.0 候选草案）
 
-> 状态：**待用户拍板**。参照系：`../threeui`（ThreeUI Community，MIT，React 19 + Three.js 组件库+展示站）。
+> 状态更新（2026-09-13）：**A、B 两项已落地为 v0.8.0**（提交 055f081，lint 0 / 测试 147/147 / build 673.66 kB · gzip 266.89 kB / file:// 双击通过），详见 [项目交接文档.md](./项目交接文档.md) 第二十节。C、D 待下一批。
 > 结论先行：**只搬设计语言，不搬代码**。ThreeUI 的 shader 组件基于 three.js/WebGL，直接引入会让单文件从 0.63MB 涨到 1.5MB+ 且与像素风冲突；正确姿势是用 canvas 2D / CSS / GSAP 做像素化转译。
 
 ## 体积红线（已定）
