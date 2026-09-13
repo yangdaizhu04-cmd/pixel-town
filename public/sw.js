@@ -1,7 +1,7 @@
 /* 拾光小镇 Service Worker：整站只有一个自包含 index.html，缓存它即可完全离线。
    只注册于 http(s) 环境；双击 file:// 打开时不受影响（靠 vite-plugin-singlefile 兜底）。
    缓存名随版本递增（package.json version → vX-Y-Z，见项目记忆「版本规则」），改版后旧缓存自动清除。 */
-const CACHE = 'pixel-town-v0-7-0'
+const CACHE = 'pixel-town-v0-8-0'
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png']
 
 self.addEventListener('install', (e) => {

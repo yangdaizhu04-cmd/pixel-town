@@ -979,3 +979,27 @@ body[data-period='dawn'] .hill.h3 { background: #8fc07f; }
 }
 .ask-day textarea { margin-top: 8px; }
 .ask-q { font-size: 15px; font-weight: bold; color: var(--brown); margin-top: 4px; }
+
+/* ---------- 夜空氛围（对标 ThreeUI 深色场景层次）：夜间时段渲染在 .sky 里 ---------- */
+.nightsky {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  image-rendering: pixelated; /* 星星方块保持硬边，不插值模糊 */
+}
+
+/* ---------- 专注氛围（对标 ThreeUI CRT）：扫描线 + 暗角，专注轮进行中亮起 ---------- */
+/* 层级 120：盖过内容(.app z1)，让位给番茄徽标(140)/悬浮阿咕(150)/弹窗(400)/toast(500) */
+.focus-veil {
+  position: fixed; inset: 0; z-index: 120; pointer-events: none;
+  opacity: 0; transition: opacity 0.45s ease;
+  background:
+    radial-gradient(ellipse at center, transparent 58%, rgba(20, 16, 28, 0.32) 100%),
+    repeating-linear-gradient(0deg, rgba(16, 12, 24, 0.06) 0 1px, transparent 1px 3px);
+}
+.focus-veil[data-on] { opacity: 1; animation: veil-flicker 3.4s steps(2) infinite; }
+@keyframes veil-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.93; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-veil[data-on] { animation: none; } /* 保留静态扫描线，去掉闪烁 */
+}

@@ -18,6 +18,8 @@ import {
 import AgentChat, { BirdAvatar } from './components/AgentChat.jsx'
 import AguVisit from './components/AguVisit.jsx'
 import IntroOverlay from './components/IntroOverlay.jsx'
+import NightSky from './components/NightSky.jsx'
+import FocusAmbience from './components/FocusAmbience.jsx'
 
 // 番茄钟迷你指示器：运行中切到别的页面时也能看到进度
 function PomoBadge({ onGo }) {
@@ -182,6 +184,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="sky" aria-hidden="true">
+        <NightSky />
         <div className="cloud c1"><PixelSprite name="cloud" scale={4} /></div>
         <div className="cloud c2"><PixelSprite name="cloud" scale={3} /></div>
         <div className="cloud c3"><PixelSprite name="cloud" scale={2.5} /></div>
@@ -278,6 +281,7 @@ export default function App() {
         ))}
       </nav>
 
+      <FocusAmbience />
       <ToastHost />
       <ConfettiHost />
       <ConfirmHost />
